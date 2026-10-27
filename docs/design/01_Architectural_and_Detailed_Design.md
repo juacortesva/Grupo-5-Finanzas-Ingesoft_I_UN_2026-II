@@ -94,8 +94,8 @@ flowchart TD
 | Component                        | Main responsibility                                                                                                         | Requirements / use cases supported | Provided capabilities                                               | Required capabilities                                                               | Main dependencies                         |
 | -------------------------------- | --------------------------------------------------------------------------------------------------------------------------- | ---------------------------------- | ------------------------------------------------------------------- | ----------------------------------------------------------------------------------- | ----------------------------------------- |
 | **Web App**                | Proveer la interfaz de usuario interactiva para el registro, la encuesta y la visualización de la categoría.              | REQ-01 (Escenarios 1, 2 y 3)       | Interfaz gráfica (UI), gestión de formularios en el cliente.      | Consumir API REST de encuestas, Consumir API REST de categorización.               | Survey Router, Categorization Router      |
-| **Survey Router**          | Recibir y validar las peticiones HTTP relacionadas con la encuesta (inicio, guardado de respuestas).                        | REQ-01 (Escenario 2)               | Endpoints HTTP para guardar progreso (`DRAFT`) y enviar encuesta. | Ejecutar la lógica del Survey Service.                                             | Survey Service                            |
-| **Survey Service**         | Gestionar el ciclo de vida de la encuesta (mantener estado `DRAFT` si se abandona) y preparar los datos para evaluación. | REQ-01 (Escenario 1 y 2)           | Lógica de negocio para el manejo de estados borrador/completado.   | Persistir respuestas parciales, Enviar respuestas finales al evaluador.             | Survey Repository, Categorization Service |
+| **Survey Router**          | Recibir y validar las peticiones HTTP relacionadas con la encuesta (inicio, guardado de respuestas, reanudación y envío). | REQ-01 (Escenario 2)               | Endpoints HTTP para guardar progreso (`DRAFT`), reanudar borrador y enviar encuesta. | Ejecutar la lógica del Survey Service.                                             | Survey Service                            |
+| **Survey Service**         | Gestionar el ciclo de vida de la encuesta (mantener estado `DRAFT` si se abandona) y preparar los datos para evaluación. | REQ-01 (Escenario 1 y 2)           | Lógica de negocio para `DRAFT`/`COMPLETED`, reanudación del único borrador del cliente y envío a evaluación. | Persistir respuestas parciales, localizar borrador por `userId`, enviar respuestas finales al evaluador. | Survey Repository, Categorization Service |
 | **Survey Repository**      | Aislar y ejecutar las operaciones de base de datos para las respuestas de la encuesta.                                      | REQ-01                             | Contrato de acceso a datos (`ISurveyRepository`).                 | Conexión a la base de datos.                                                       | PostgreSQL                                |
 | **Categorization Router**  | Recibir las peticiones HTTP para evaluar el perfil financiero.                                                              | REQ-01 (Escenario 1 y 3)           | Endpoints HTTP para iniciar evaluación.                            | Ejecutar la lógica del Categorization Service.                                     | Categorization Service                    |
 | **Categorization Service** | Aplicar la matriz de ponderación y la regla de desempate (BR-03) para asignar la categoría inicial.                       | REQ-01 (Regla BR-03, Escenario 3)  | Cálculo matemático de perfil y categorización.                   | Guardar la categoría calculada, Validar respuestas (recibidas del Survey Service). | Profile Repository                        |
@@ -122,7 +122,7 @@ classDiagram
     class CategorizationService {
         - scoringEngine : ScoringEngine
         - profileRepo : ProfileRepository
-        + evaluateProfile(surveyId : UUID, answers : List~Answer~) EvaluationResult
+        + evaluateProfile(userId : UUID, surveyId : UUID, answers : List~Answer~) EvaluationResult
     }
   
     class ScoringEngine {
@@ -137,6 +137,15 @@ classDiagram
         + totalScore : Decimal
         + status : String
     }
+
+    class FinancialProfile {
+        + profileId : UUID
+        + userId : UUID
+        + surveyId : UUID
+        + assignedCategory : FinancialCategory
+        + evaluationStatus : String
+        + totalScore : Decimal
+    }
   
     class FinancialCategory {
         <<enumeration>>
@@ -148,7 +157,8 @@ classDiagram
   
     class ProfileRepository {
         <<interface>>
-        + saveCategory(userId : UUID, category : FinancialCategory, status : String) void
+        + saveCategory(userId : UUID, surveyId : UUID, category : FinancialCategory, status : String) void
+        + findByUserId(userId : UUID) FinancialProfile
     }
 
     CategorizationService --> ScoringEngine : uses
@@ -156,6 +166,8 @@ classDiagram
     CategorizationService --> ProfileRepository : depends on
     ScoringEngine ..> FinancialCategory : returns
     EvaluationResult *-- FinancialCategory : contains
+    FinancialProfile *-- FinancialCategory : contains
+    ProfileRepository ..> FinancialProfile : returns
 ```
 
 #### Diagrama B: Módulo de Encuesta (`Survey Module`)
@@ -164,9 +176,11 @@ classDiagram
 classDiagram
     class SurveyManager {
         - surveyRepo : SurveyRepository
+        - categorizationService : CategorizationService
         + startSurvey(userId : UUID) Survey
         + saveDraft(surveyId : UUID, answers : List~Answer~) void
-        + completeSurvey(surveyId : UUID) Survey
+        + resumeSurvey(userId : UUID) Survey
+        + completeSurvey(surveyId : UUID) EvaluationResult
     }
   
     class Survey {
@@ -200,10 +214,12 @@ classDiagram
     class SurveyRepository {
         <<interface>>
         + findById(surveyId : UUID) Survey
+        + findDraftByUserId(userId : UUID) Survey
         + save(survey : Survey) void
     }
 
     SurveyManager --> SurveyRepository : depends on
+    SurveyManager --> CategorizationService : evaluates via
     SurveyManager ..> Survey : manages
     Survey "1" *-- "1..10" Question : contains
     Survey "1" *-- "0..10" Answer : contains
@@ -217,14 +233,15 @@ classDiagram
 | **CategorizationService** | Categorization Module   | Orquestar el proceso de evaluación. Recibe la encuesta completada, solicita el cálculo matemático y maneja el escenario de excepción (si falla, asigna estado "En Evaluación" según REQ-01).  | ScoringEngine, ProfileRepository |
 | **ScoringEngine**         | Categorization Module   | Aplicar la matriz de ponderación y calcular el puntaje exacto usando `Decimal`. Implementa la regla **BR-03** (si el puntaje está en el límite, asigna la categoría más conservadora). | FinancialCategory                |
 | **EvaluationResult**      | Categorization Module   | Transportar el resultado final de la evaluación (puntaje obtenido, categoría asignada y estado del proceso) antes de ser guardado.                                                                | FinancialCategory                |
+| **FinancialProfile**      | Categorization Module   | Representar la categoría de inicio vigente del cliente (BR-01), incluyendo la encuesta origen y el estado `COMPLETED` o `ERROR`.                                                                | FinancialCategory                |
 | **FinancialCategory**     | Categorization Module   | Definir el catálogo cerrado de categorías financieras (Conservador, Moderado, Agresivo, En Evaluación).                                                                                          | N/A (Enumeration)                |
-| **ProfileRepository**     | Categorization Module   | Proveer el contrato (interfaz) para persistir la categoría calculada y el estado final en la base de datos, ocultando los detalles de SQLAlchemy.                                                  | PostgreSQL (vía ORM)            |
-| **SurveyManager**         | Survey Module           | Coordinar el ciclo de vida de la encuesta. Iniciar la encuesta, guardar el progreso parcial (`DRAFT`) y marcarla como completada (`COMPLETED`).                                                 | Survey, SurveyRepository         |
+| **ProfileRepository**     | Categorization Module   | Proveer el contrato (interfaz) para persistir y recuperar la categoría calculada del perfil del cliente (`userId`) junto con la encuesta que la originó (`surveyId`), ocultando los detalles de SQLAlchemy. | PostgreSQL (vía ORM)            |
+| **SurveyManager**         | Survey Module           | Coordinar el ciclo de vida de la encuesta. Iniciar la encuesta, guardar el progreso parcial (`DRAFT`), reanudar el borrador del cliente y, al completar, invocar la evaluación. El envío exitoso transiciona a `COMPLETED` y delega el cálculo en `CategorizationService`. | Survey, SurveyRepository, CategorizationService |
 | **Survey**                | Survey Module           | Mantener el estado actual de la encuesta, agrupar las preguntas y almacenar temporalmente las respuestas del cliente.                                                                               | Question, Answer, SurveyStatus   |
 | **Question**              | Survey Module           | Representar una pregunta individual del cuestionario, incluyendo su peso (peso decimal) para la matriz de evaluación.                                                                              | Survey                           |
 | **Answer**                | Survey Module           | Almacenar la opción seleccionada por el usuario para una pregunta específica y calcular su valor ponderado.                                                                                       | Question, Survey                 |
 | **SurveyStatus**          | Survey Module           | Definir los estados válidos del flujo (DRAFT, COMPLETED, ERROR) para evitar transiciones inválidas.                                                                                               | N/A (Enumeration)                |
-| **SurveyRepository**      | Survey Module           | Proveer el contrato (interfaz) para guardar el estado de la encuesta y las respuestas parciales en la base de datos.                                                                                | PostgreSQL (vía ORM)            |
+| **SurveyRepository**      | Survey Module           | Proveer el contrato (interfaz) para guardar el estado de la encuesta, recuperar por `surveyId` y localizar el único borrador (`DRAFT`) de un cliente.                                                | PostgreSQL (vía ORM)            |
 
 **Nota de diseño sobre Colaboradores:**
 Ninguna clase accede directamente a PostgreSQL. Las clases de servicio (`CategorizationService`, `SurveyManager`) solo colaboran con las interfaces de los repositorios (`ProfileRepository`, `SurveyRepository`), garantizando el bajo acoplamiento y el ocultamiento de la información exigidos en el ADR.
@@ -232,7 +249,7 @@ Ninguna clase accede directamente a PostgreSQL. Las clases de servicio (`Categor
 ### 3.4 Behavior of one key operation
 
 ```text
-evaluateProfile(surveyId, answers):
+evaluateProfile(userId, surveyId, answers):
     TRY:
         IF answers IS EMPTY:
             THROW InvalidInputError("La encuesta no tiene respuestas")
@@ -243,8 +260,8 @@ evaluateProfile(surveyId, answers):
         // 2. Determinación de categoría (incluye validación interna de BR-03)
         assignedCategory = ScoringEngine.determineCategory(totalScore)
   
-        // 3. Persistencia del resultado exitoso
-        ProfileRepository.saveCategory(surveyId, assignedCategory, "COMPLETED")
+        // 3. Persistencia del resultado exitoso sobre el perfil del cliente (BR-01)
+        ProfileRepository.saveCategory(userId, surveyId, assignedCategory, "COMPLETED")
         RETURN EvaluationResult(surveyId, assignedCategory, totalScore, "COMPLETED")
 
     CATCH Exception as error:
@@ -253,7 +270,7 @@ evaluateProfile(surveyId, answers):
         provisionalCategory = FinancialCategory.UNDER_EVALUATION
   
         // Se guarda como provisional para permitir el acceso al panel principal
-        ProfileRepository.saveCategory(surveyId, provisionalCategory, "ERROR")
+        ProfileRepository.saveCategory(userId, surveyId, provisionalCategory, "ERROR")
         RETURN EvaluationResult(surveyId, provisionalCategory, null, "ERROR")
 ```
 
