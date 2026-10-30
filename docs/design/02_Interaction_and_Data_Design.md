@@ -20,47 +20,61 @@ Se modelan **dos interacciones** derivadas del único requerimiento con caso de 
 
 ```mermaid
 sequenceDiagram
+    autonumber
     actor Cliente
-    participant WebApp as Web App
-    participant SRouter as Survey Router
+    participant WebApp as Web App (React)
+    participant SRouter as SurveyRouter (FastAPI)
     participant SMgr as SurveyManager
-    participant SRepo as Survey Repository
+    participant SRepo as SurveyRepository
     participant CSvc as CategorizationService
     participant SEng as ScoringEngine
-    participant PRepo as Profile Repository
+    participant PRepo as ProfileRepository
 
-    Cliente->>WebApp: confirmar envio de encuesta
-    WebApp->>SRouter: completeSurvey(surveyId)
-    SRouter->>SMgr: completeSurvey(surveyId)
-    SMgr->>SRepo: findById(surveyId)
-    SRepo-->>SMgr: survey with answers
-    alt answers complete and survey is DRAFT
-        SMgr->>SRepo: save(survey COMPLETED)
-        SMgr->>CSvc: evaluateProfile(userId, surveyId, answers)
-        CSvc->>SEng: calculateScore(answers)
-        SEng-->>CSvc: totalScore
-        CSvc->>SEng: determineCategory(totalScore)
-        SEng-->>CSvc: assignedCategory
-        alt scoring and persistence succeed
-            CSvc->>PRepo: saveCategory(userId, surveyId, assignedCategory, COMPLETED)
-            PRepo-->>CSvc: persisted
-            CSvc-->>SMgr: EvaluationResult COMPLETED
-            SMgr-->>SRouter: result with category
-            SRouter-->>WebApp: category and confirmation
-            WebApp-->>Cliente: categoria asignada y resumen del plan
-        else scoring or persistence fails
-            CSvc->>PRepo: saveCategory(userId, surveyId, UNDER_EVALUATION, ERROR)
-            PRepo-->>CSvc: persisted provisional
-            CSvc-->>SMgr: EvaluationResult ERROR
-            SMgr-->>SRouter: provisional result
-            SRouter-->>WebApp: error notice and provisional category
-            WebApp-->>Cliente: aviso de falla y acceso al panel
-        end
-    else answers empty or survey not DRAFT
-        SMgr-->>SRouter: InvalidInputError
-        SRouter-->>WebApp: validation error
-        WebApp-->>Cliente: envio rechazado encuesta incompleta
-    end
+    Cliente->>WebApp: Confirmar y enviar cuestionario
+    activate WebApp
+    WebApp->>SRouter: POST /surveys/{surveyId}/complete (Bearer Token)
+    activate SRouter
+    Note over SRouter: Extrae y valida userId autenticado del token de sesión
+    SRouter->>SMgr: completeSurvey(surveyId: UUID, userId: UUID)
+    activate SMgr
+    
+    SMgr->>SRepo: findById(surveyId: UUID)
+    activate SRepo
+    SRepo-->>SMgr: survey: Survey
+    deactivate SRepo
+    
+    Note over SMgr: Valida: survey.userId == userId,<br/>status == DRAFT y respuestas obligatorias completas
+
+    SMgr->>CSvc: evaluateProfile(userId: UUID, surveyId: UUID, answers: List[Answer])
+    activate CSvc
+    
+    CSvc->>SEng: evaluate(answers: List[Answer])
+    activate SEng
+    Note over SEng: Aplica ponderación de opciones<br/>y regla de desempate BR-03
+    SEng-->>CSvc: scoreEval: ScoreEvaluation(totalScore, category)
+    deactivate SEng
+    
+    Note over CSvc: Instancia entidad FinancialProfile(userId, surveyId, category, totalScore, "COMPLETED")
+    CSvc->>PRepo: save(profile: FinancialProfile)
+    activate PRepo
+    PRepo-->>CSvc: savedProfile: FinancialProfile
+    deactivate PRepo
+    
+    CSvc-->>SMgr: result: EvaluationResult(surveyId, category, totalScore, "COMPLETED")
+    deactivate CSvc
+    
+    Note over SMgr: survey.markCompleted()
+    SMgr->>SRepo: save(survey: Survey)
+    activate SRepo
+    SRepo-->>SMgr: savedSurvey: Survey
+    deactivate SRepo
+    
+    SMgr-->>SRouter: result: EvaluationResult
+    deactivate SMgr
+    SRouter-->>WebApp: HTTP 200 OK (SurveyCompletionResponse)
+    deactivate SRouter
+    WebApp-->>Cliente: Despliega categoría asignada y resumen del plan
+    deactivate WebApp
 ```
 
 | Use Case step or flow | Message(s) in the diagram | Information exchanged | Operation defined in (Deliverable 1) |
