@@ -1,21 +1,3 @@
-<!--
-HOW TO USE THIS TEMPLATE
-------------------------
-1. Copy this file to docs/design/01_Architectural_and_Detailed_Design.md in your team repository.
-2. This is v1.0 of work you already started: your Class 11 "Architectural Hypothesis v0.1"
-   and your Class 12 "Detailed Design v0.1". Extend them to your whole system. Do not restart.
-3. Use YOUR project. Generic examples (e-commerce, food delivery, banking, library) are
-   only reference material and cannot be submitted as project artifacts.
-4. Fill in every section. If something genuinely does not apply, write "N/A: reason".
-   Never invent content to fill a blank.
-5. Every diagram needs the table or argument that explains it. A diagram records design
-   decisions. It does not create them.
-6. Diagrams: Mermaid is preferred because it renders on GitHub. PlantUML or another tool is
-   accepted if the exported image is committed and embedded in this file.
-   Optionally, also add a JPG of each diagram in docs/design/diagrams/ (the Markdown prevails if they differ).
-7. Read Design_Deliverable_1_Example.md for the expected level of detail. Do not copy it.
--->
-
 # Asesor Financiero Personal — Architectural & Detailed Design v1.0
 
 |                   |                                                                                                                                            |
@@ -38,7 +20,7 @@ HOW TO USE THIS TEMPLATE
 
 | Requirement / Use Case ID                          | Why it shapes the structure                                                                                                                                                                                                                          | Quality attribute, constraint or business rule involved                                                                                                                                                                                                               |
 | -------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **REQ-01 / Catalogar Situación Financiera** | Obliga a separar la lógica de gestión de la encuesta (guardado temporal, reanudación) de la lógica matemática de evaluación (matriz de ponderación). Esto justifica la división del backend en los módulos `Survey` y `Categorization`. | **BR-01:** Asignar categoría antes de generar el plan.**BR-02:** Máximo 10 preguntas (límite de tiempo).**BR-03:** Desempate por categoría de menor riesgo en los límites.**Constraint:** Sin integraciones con APIs bancarias externas. |
+| **REQ-01 / Catalogar Situación Financiera** | Obliga a separar la lógica de gestión de la encuesta (guardado temporal, reanudación) de la lógica matemática de evaluación (matriz de ponderación). Esto justifica la división del backend en los módulos `Survey` y `Categorization`. Además, el riesgo de filtración de datos del cliente exige que la frontera de captura de respuestas sea explícita y que la propiedad de cada registro se valide en las capas de servicio y persistencia. | **BR-01:** Asignar categoría antes de generar el plan.**BR-02:** Máximo 10 preguntas (límite de tiempo).**BR-03:** Desempate por categoría de menor riesgo en los límites.**Constraint:** Sin integraciones con APIs bancarias externas.**Calidad:** Seguridad, privacidad e integridad de los datos del cliente (cada usuario solo puede consultar y modificar su propia información). |
 | **ADR-0001 / Stack Tecnológico**            | Define que la arquitectura debe ser una API REST desacoplada del cliente web, aplicando un patrón por capas (`Routers -> Services -> Repositories`) para asegurar la mantenibilidad en un semestre académico.                                    | **Restricción de tiempo:** Entregas en 15 semanas.**Requisito arquitectónico:** Desacoplamiento claro entre cliente web y servidor.**Calidad:** Precisión numérica estricta (uso de `decimal.Decimal` y PostgreSQL).                          |
 
 ---
@@ -94,13 +76,15 @@ flowchart TD
 | Component                        | Main responsibility                                                                                                         | Requirements / use cases supported | Provided capabilities                                               | Required capabilities                                                               | Main dependencies                         |
 | -------------------------------- | --------------------------------------------------------------------------------------------------------------------------- | ---------------------------------- | ------------------------------------------------------------------- | ----------------------------------------------------------------------------------- | ----------------------------------------- |
 | **Web App**                | Proveer la interfaz de usuario interactiva para el registro, la encuesta y la visualización de la categoría.              | REQ-01 (Escenarios 1, 2 y 3)       | Interfaz gráfica (UI), gestión de formularios en el cliente.      | Consumir API REST de encuestas, Consumir API REST de categorización.               | Survey Router, Categorization Router      |
-| **Survey Router**          | Recibir y validar las peticiones HTTP relacionadas con la encuesta (inicio, guardado de respuestas, reanudación y envío). | REQ-01 (Escenario 2)               | Endpoints HTTP para guardar progreso (`DRAFT`), reanudar borrador y enviar encuesta. | Ejecutar la lógica del Survey Service.                                             | Survey Service                            |
-| **Survey Service**         | Gestionar el ciclo de vida de la encuesta (mantener estado `DRAFT` si se abandona) y preparar los datos para evaluación. | REQ-01 (Escenario 1 y 2)           | Lógica de negocio para `DRAFT`/`COMPLETED`, reanudación del único borrador del cliente y envío a evaluación. | Persistir respuestas parciales, localizar borrador por `userId`, enviar respuestas finales al evaluador. | Survey Repository, Categorization Service |
-| **Survey Repository**      | Aislar y ejecutar las operaciones de base de datos para las respuestas de la encuesta.                                      | REQ-01                             | Contrato de acceso a datos (`ISurveyRepository`).                 | Conexión a la base de datos.                                                       | PostgreSQL                                |
-| **Categorization Router**  | Recibir las peticiones HTTP para evaluar el perfil financiero.                                                              | REQ-01 (Escenario 1 y 3)           | Endpoints HTTP para iniciar evaluación.                            | Ejecutar la lógica del Categorization Service.                                     | Categorization Service                    |
-| **Categorization Service** | Aplicar la matriz de ponderación y la regla de desempate (BR-03) para asignar la categoría inicial.                       | REQ-01 (Regla BR-03, Escenario 3)  | Cálculo matemático de perfil y categorización.                   | Guardar la categoría calculada, Validar respuestas (recibidas del Survey Service). | Profile Repository                        |
-| **Profile Repository**     | Aislar y ejecutar las operaciones de base de datos para el perfil y categoría del cliente.                                 | REQ-01 (BR-01)                     | Contrato de acceso a datos (`IProfileRepository`).                | Conexión a la base de datos.                                                       | PostgreSQL                                |
+| **Survey Router**          | Recibir y validar las peticiones HTTP relacionadas con la encuesta (inicio, guardado de respuestas, reanudación y envío), verificando que el `userId` autenticado corresponda al propietario de la encuesta antes de delegar al servicio. | REQ-01 (Escenario 2)               | Endpoints HTTP para guardar progreso (`DRAFT`), reanudar borrador y enviar encuesta. | Ejecutar la lógica del Survey Service, validar la sesión del cliente.                                             | Survey Service                            |
+| **Survey Service**         | Gestionar el ciclo de vida de la encuesta (mantener estado `DRAFT` si se abandona) y preparar los datos para evaluación, validando la propiedad de la encuesta antes de consultar, modificar, reanudar o completar sus respuestas. | REQ-01 (Escenario 1 y 2)           | Lógica de negocio para `DRAFT`/`COMPLETED`, reanudación del único borrador del cliente y envío a evaluación. | Persistir respuestas parciales, localizar borrador por `userId`, enviar respuestas finales al evaluador. | Survey Repository, Categorization Service |
+| **Survey Repository**      | Aislar y ejecutar las operaciones de base de datos para las respuestas de la encuesta, restringiendo consultas y modificaciones a los registros del propietario (`userId`). | REQ-01                             | Contrato de acceso a datos (`ISurveyRepository`).                 | Conexión a la base de datos.                                                       | PostgreSQL                                |
+| **Categorization Router**  | Recibir las peticiones HTTP para evaluar el perfil financiero, garantizando que las solicitudes estén asociadas al usuario autenticado. | REQ-01 (Escenario 1 y 3)           | Endpoints HTTP para iniciar evaluación.                            | Ejecutar la lógica del Categorization Service, validar la sesión del cliente.                                     | Categorization Service                    |
+| **Categorization Service** | Aplicar la matriz de ponderación y la regla de desempate (BR-03) para asignar la categoría inicial, asegurando que las operaciones sobre el perfil financiero utilicen la identidad del usuario autenticado. | REQ-01 (Regla BR-03, Escenario 3)  | Cálculo matemático de perfil y categorización.                   | Guardar la categoría calculada, Validar respuestas (recibidas del Survey Service). | Profile Repository                        |
+| **Profile Repository**     | Aislar y ejecutar las operaciones de base de datos para el perfil y categoría del cliente, restringiendo consultas y modificaciones al propietario (`userId`). | REQ-01 (BR-01)                     | Contrato de acceso a datos (`IProfileRepository`).                | Conexión a la base de datos.                                                       | PostgreSQL                                |
 | **PostgreSQL**             | Almacenar de forma persistente y relacional los usuarios, respuestas y categorías con precisión decimal.                  | ADR-0001                           | Persistencia de datos, integridad referencial.                      | N/A                                                                                 | N/A                                       |
+
+**Nota de diseño sobre autenticación:** El `userId` utilizado en las operaciones anteriores se obtiene del contexto de autenticación validado por el backend (dependencia de FastAPI), no del cuerpo de la petición HTTP. Esto garantiza que un cliente no pueda suplantar la identidad de otro usuario manipulando los parámetros de la solicitud.
 
 ---
 
@@ -111,7 +95,7 @@ flowchart TD
 | Component                       | Why it was selected (risk, complexity, centrality to the drivers)                                                                                                                                                                                                                                                                                                                                                                                                          |
 | ------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Categorization Module** | **Complejidad y Centralidad:** Es el componente más crítico del sistema porque contiene la lógica matemática de la matriz de ponderación y la regla de negocio **BR-03** (asignación conservadora en caso de empate). Además, debe gestionar el escenario de excepción del REQ-01 (asignar la categoría provisional "En Evaluación" si el servicio falla). Un error aquí desvirtúa la propuesta de valor del producto (personalización del plan). |
-| **Survey Module**         | **Riesgo de Abandono y Manejo de Estado:** Fue seleccionado porque gestiona el ciclo de vida de la encuesta y la posibilidad de que el usuario abandone el proceso a la mitad. Requiere un diseño cuidadoso para manejar la transición de estado de borrador (`DRAFT`) a completado (`COMPLETED`), garantizando que el usuario pueda reanudar la encuesta exactamente donde la dejó sin perder información.                                                  |
+| **Survey Module**         | **Complejidad del Manejo de Estado, Continuidad y Protección de Datos:** Fue seleccionado porque gestiona el ciclo de vida de la encuesta y la información personal y financiera proporcionada por el usuario. Requiere un diseño cuidadoso para manejar la transición de estado de borrador (`DRAFT`) a completado (`COMPLETED`), garantizar la continuidad del flujo alternativo de reanudación, y asegurar que cada usuario solo pueda consultar o modificar sus propias respuestas. Además, concentra la superficie de exposición del riesgo de filtración, divulgación o modificación no autorizada formulado en REQ-01, por lo que el diseño de ownership por `userId` y la inmutabilidad del estado `COMPLETED` son parte central de su justificación. |
 
 ### 3.2 Class Diagram(s)
 
@@ -178,9 +162,9 @@ classDiagram
         - surveyRepo : SurveyRepository
         - categorizationService : CategorizationService
         + startSurvey(userId : UUID) Survey
-        + saveDraft(surveyId : UUID, answers : List~Answer~) void
+        + saveDraft(surveyId : UUID, userId : UUID, answers : List~Answer~) void
         + resumeSurvey(userId : UUID) Survey
-        + completeSurvey(surveyId : UUID) EvaluationResult
+        + completeSurvey(surveyId : UUID, userId : UUID) EvaluationResult
     }
   
     class Survey {
@@ -213,7 +197,7 @@ classDiagram
   
     class SurveyRepository {
         <<interface>>
-        + findById(surveyId : UUID) Survey
+        + findById(surveyId : UUID, userId : UUID) Survey
         + findDraftByUserId(userId : UUID) Survey
         + save(survey : Survey) void
     }
@@ -226,6 +210,8 @@ classDiagram
     Survey --> SurveyStatus : has
 ```
 
+**Nota de diseño:** El parámetro `userId` en `saveDraft`, `completeSurvey` y `findById` proviene del contexto de autenticación validado por el backend (dependencia de FastAPI), no del cuerpo de la petición. `findById` solo devuelve la encuesta si pertenece al `userId` indicado; en caso contrario, se comporta como si no existiera. Adicionalmente, una encuesta en estado `COMPLETED` no puede volver a `DRAFT` ni aceptar modificaciones de sus respuestas mediante las operaciones normales de la aplicación.
+
 ### 3.3 Class Responsibilities
 
 | Class                           | Component it belongs to | Responsibility                                                                                                                                                                                      | Key collaborators                |
@@ -235,13 +221,13 @@ classDiagram
 | **EvaluationResult**      | Categorization Module   | Transportar el resultado final de la evaluación (puntaje obtenido, categoría asignada y estado del proceso) antes de ser guardado.                                                                | FinancialCategory                |
 | **FinancialProfile**      | Categorization Module   | Representar la categoría de inicio vigente del cliente (BR-01), incluyendo la encuesta origen y el estado `COMPLETED` o `ERROR`.                                                                | FinancialCategory                |
 | **FinancialCategory**     | Categorization Module   | Definir el catálogo cerrado de categorías financieras (Conservador, Moderado, Agresivo, En Evaluación).                                                                                          | N/A (Enumeration)                |
-| **ProfileRepository**     | Categorization Module   | Proveer el contrato (interfaz) para persistir y recuperar la categoría calculada del perfil del cliente (`userId`) junto con la encuesta que la originó (`surveyId`), ocultando los detalles de SQLAlchemy. | PostgreSQL (vía ORM)            |
+| **ProfileRepository**     | Categorization Module   | Proveer el contrato (interfaz) para persistir y recuperar la categoría calculada del perfil del cliente (`userId`) junto con la encuesta que la originó (`surveyId`), restringiendo las operaciones al propietario autenticado y ocultando los detalles de SQLAlchemy. | PostgreSQL (vía ORM)            |
 | **SurveyManager**         | Survey Module           | Coordinar el ciclo de vida de la encuesta. Iniciar la encuesta, guardar el progreso parcial (`DRAFT`), reanudar el borrador del cliente y, al completar, invocar la evaluación. El envío exitoso transiciona a `COMPLETED` y delega el cálculo en `CategorizationService`. | Survey, SurveyRepository, CategorizationService |
 | **Survey**                | Survey Module           | Mantener el estado actual de la encuesta, agrupar las preguntas y almacenar temporalmente las respuestas del cliente.                                                                               | Question, Answer, SurveyStatus   |
 | **Question**              | Survey Module           | Representar una pregunta individual del cuestionario, incluyendo su peso (peso decimal) para la matriz de evaluación.                                                                              | Survey                           |
 | **Answer**                | Survey Module           | Almacenar la opción seleccionada por el usuario para una pregunta específica y calcular su valor ponderado.                                                                                       | Question, Survey                 |
 | **SurveyStatus**          | Survey Module           | Definir los estados válidos del flujo (DRAFT, COMPLETED, ERROR) para evitar transiciones inválidas.                                                                                               | N/A (Enumeration)                |
-| **SurveyRepository**      | Survey Module           | Proveer el contrato (interfaz) para guardar el estado de la encuesta, recuperar por `surveyId` y localizar el único borrador (`DRAFT`) de un cliente.                                                | PostgreSQL (vía ORM)            |
+| **SurveyRepository**      | Survey Module           | Proveer el contrato (interfaz) para guardar el estado de la encuesta, recuperar por `surveyId` validando que pertenezca al `userId` indicado, y localizar el único borrador (`DRAFT`) de un cliente.                                                | PostgreSQL (vía ORM)            |
 
 **Nota de diseño sobre Colaboradores:**
 Ninguna clase accede directamente a PostgreSQL. Las clases de servicio (`CategorizationService`, `SurveyManager`) solo colaboran con las interfaces de los repositorios (`ProfileRepository`, `SurveyRepository`), garantizando el bajo acoplamiento y el ocultamiento de la información exigidos en el ADR.
@@ -266,7 +252,9 @@ evaluateProfile(userId, surveyId, answers):
 
     CATCH Exception as error:
         // Escenario 3 del REQ-01: Falla en el servicio de categorización
-        LogError(error)
+        // Registrar únicamente información técnica necesaria para diagnosticar el error.
+        // No incluir respuestas, puntajes ni datos personales o financieros del usuario.
+        LogError(errorType, operation, timestamp)
         provisionalCategory = FinancialCategory.UNDER_EVALUATION
   
         // Se guarda como provisional para permitir el acceso al panel principal
@@ -282,7 +270,7 @@ evaluateProfile(userId, surveyId, answers):
 | ------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | **Cohesion:** do the responsibilities inside each class or component belong together?            | **Alta cohesión.** La responsabilidad está fuertemente agrupada. Por ejemplo, el `CategorizationService` solo orquesta el proceso y maneja las excepciones; no sabe hacer matemáticas. El cálculo matemático y la regla de desempate (BR-03) viven exclusivamente en `ScoringEngine`. De igual forma, el `SurveyManager` solo se encarga del ciclo de vida de la encuesta (`DRAFT/COMPLETED`) y no se mezcla con la lógica de categorización. |
 | **Coupling:** how far does a change in one element spread? Where are the strongest dependencies? | **Bajo acoplamiento.** La dependencia más fuerte es hacia la base de datos, pero está aislada mediante las interfaces `ProfileRepository` y `SurveyRepository`. Si cambia la base de datos o el ORM (SQLAlchemy), solo se modifican las implementaciones de los repositorios, sin afectar a los servicios. Además, la comunicación entre los dos módulos (Survey y Categorization) es unidireccional y a través de contratos bien definidos.       |
-| **Information hiding:** what did you keep private or internal, and why?                          | **Ocultamiento efectivo.** La lógica exacta de la matriz de ponderación y la validación del límite para la regla BR-03 están ocultas dentro del `ScoringEngine` (métodos privados o encapsulados). Otros módulos no necesitan saber *cómo* se calcula el puntaje, solo piden el resultado. De igual manera, los detalles de la conexión a PostgreSQL (credenciales, queries SQL) están ocultos detrás de las interfaces de los repositorios.  |
+| **Information hiding:** what did you keep private or internal, and why?                          | **Ocultamiento efectivo.** La lógica exacta de la matriz de ponderación y la validación del límite para la regla BR-03 están ocultas dentro del `ScoringEngine` (métodos privados o encapsulados). Otros módulos no necesitan saber *cómo* se calcula el puntaje, solo piden el resultado. De igual manera, los detalles de la conexión a PostgreSQL (credenciales, queries SQL) están ocultos detrás de las interfaces de los repositorios. Adicionalmente, las operaciones de los repositorios restringen el acceso a los registros validando el `userId` obtenido del contexto de autenticación, de modo que los servicios no pueden consultar ni modificar información de otros usuarios mediante identificadores arbitrarios. Las credenciales de conexión a PostgreSQL permanecen fuera del código fuente y utilizan únicamente los permisos necesarios para las operaciones de la aplicación. |
 
 **At least one real finding** (a problem you found in your own design) **and what you changed or would change:**
 
