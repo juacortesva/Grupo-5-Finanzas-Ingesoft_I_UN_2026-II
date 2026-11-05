@@ -57,8 +57,7 @@
 
 | Risk | Likelihood | Impact | Mitigation (optional) |
 | --- | --- | --- | --- |
-| El usuario responde la encuesta con datos imprecisos o apresurados | Media | Medio | Permitir al usuario reevaluar o ajustar su perfil financiero más adelante desde la configuración de su cuenta. |
-| El usuario abandona la aplicación a mitad de la encuesta | Media | Alto | Guardar el progreso de cada pregunta respondida en estado borrador (`DRAFT`) para permitir reanudar el cuestionario sin perder información hasta su consolidación (`COMPLETED`). |
+| Acceso, divulgación o modificación no autorizados de los datos personales y respuestas financieras del usuario durante el diligenciamiento, procesamiento o almacenamiento de la encuesta, comprometiendo la confidencialidad, privacidad e integridad de la información. | Media (estimación inicial, pendiente de validación durante la implementación) | Alto | Utilizar la identidad del usuario obtenida de su sesión autenticada y validar en el backend que cada encuesta y perfil consultado o modificado le pertenezca; aplicar filtros por `userId` en las operaciones de lectura y escritura; mantener la restricción que impide modificar una encuesta `COMPLETED`; proteger la comunicación mediante HTTPS/TLS; evitar incluir respuestas y puntajes en los logs de aplicación; y limitar las credenciales de PostgreSQL a los permisos necesarios para la aplicación. |
 
 **Open Questions**
 
