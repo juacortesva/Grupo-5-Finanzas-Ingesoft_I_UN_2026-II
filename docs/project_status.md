@@ -98,6 +98,7 @@ Grupo-5-Finanzas-Ingesoft_I_UN_2026-II/
 └── docs/
     ├── code_style.md                                  # Estándares Ruff, ESLint, Decimal, Logs
     ├── estructura_repositorio.md                      # Reglas de monorepo y capas
+    ├── project_status.md                              # Estado actualizado del proyecto
     ├── adr/
     │   ├── adr-0001.md                                # Stack React + FastAPI + PostgreSQL
     │   └── adr_0002.md                                # Walking Skeleton + Vertical Slices
