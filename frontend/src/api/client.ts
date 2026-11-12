@@ -14,13 +14,16 @@ async function request(path: string, init?: RequestInit): Promise<unknown> {
   return body;
 }
 
-function isSurveyStartResponse(value: unknown): value is SurveyStartResponse {
+function isHealthResponse(value: unknown): value is HealthResponse {
   return (
     typeof value === "object" &&
     value !== null &&
-    "surveyId" in value &&
-    "questions" in value
+    Object.values(value).every((field) => typeof field === "string")
   );
+}
+
+function isSurveyStartResponse(value: unknown): value is SurveyStartResponse {
+  return typeof value === "object" && value !== null && "surveyId" in value && "questions" in value;
 }
 
 export function getApiUrl(): string {
@@ -29,7 +32,10 @@ export function getApiUrl(): string {
 
 export async function getHealth(): Promise<HealthResponse> {
   const body = await request("/api/v1/health");
-  return body as HealthResponse;
+  if (!isHealthResponse(body)) {
+    throw new Error("Respuesta inesperada de /health.");
+  }
+  return body;
 }
 
 export async function startSurvey(): Promise<SurveyStartResponse> {

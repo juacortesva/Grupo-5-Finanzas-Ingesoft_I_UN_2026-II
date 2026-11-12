@@ -1,11 +1,6 @@
 import { useCallback, useState } from "react";
 
-export interface AsyncActionState<T> {
-  data: T | null;
-  error: string | null;
-  loading: boolean;
-  run: () => Promise<void>;
-}
+import type { AsyncActionState } from "../types";
 
 /** Ejecuta una llamada asíncrona y expone datos, error y estado de carga. */
 export function useAsyncAction<T>(action: () => Promise<T>): AsyncActionState<T> {
@@ -13,7 +8,7 @@ export function useAsyncAction<T>(action: () => Promise<T>): AsyncActionState<T>
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  const run = useCallback(async () => {
+  const run = useCallback(async (): Promise<void> => {
     setLoading(true);
     setError(null);
     try {
