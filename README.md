@@ -137,10 +137,14 @@ Para detener los procesos: `pkill -f uvicorn` y `pkill -f vite`.
 # backend/
 ruff check . && ruff format --check . && mypy src scripts && pytest
 
-# frontend/ (con el backend corriendo, regenera los tipos desde OpenAPI)
-npm run gen:api       # escribe src/api/generated/schema.d.ts
-npm run typecheck
+# frontend/
+npm run lint && npm run format:check && npm run typecheck
+npm run gen:api       # con el backend corriendo: regenera src/api/generated/schema.d.ts
 ```
+
+Las nuevas migraciones (`alembic revision --autogenerate -m "..."`) pasan por
+`ruff check --fix` y `ruff format` automáticamente (`post_write_hooks` en
+`alembic.ini`).
 
 `DATABASE_URL` también puede reemplazarse solo para las pruebas con
 `TEST_DATABASE_URL`. Cada prueba corre en una transacción que se revierte, así que

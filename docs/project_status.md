@@ -59,25 +59,24 @@ Grupo-5-Finanzas-Ingesoft_I_UN_2026-II/
 │   ├── pyproject.toml                                   # build-system, Ruff, Mypy strict, Pytest
 │   ├── alembic/versions/
 │   │   ├── 8cedce29f65b_create_initial_schema_for_req_01.py   # 5 tablas del modelo ER
-│   │   └── e4a1ef71cbd4_add_design_constraints_for_req_01.py  # CHECKs + display_order único activo
+│   │   └── e4a1ef71cbd4_add_design_constraints_for_req_01.py  # CHECKs, display_order único activo, triggers BR-02 y completed_at
 │   ├── scripts/
 │   │   ├── seed_demo.py                                 # Cliente demo + 3 preguntas (idempotente)
 │   │   └── smoke_test.sh                                # Prueba de humo por CLI (curl)
 │   ├── src/
 │   │   ├── main.py                                      # CORS desde Settings, /api/v1/health con SELECT 1
 │   │   ├── core/                                        # config, database, auth_deps, schemas, models (ClientModel)
-│   │   ├── survey/                                      # router, service, repository, models, schemas, enums
+│   │   ├── survey/                                      # router → service → repository (create_draft tolera la carrera §2.4)
 │   │   └── categorization/                              # models (FinancialProfileModel), enums
 │   └── tests/
 │       ├── conftest.py                                  # Transacción con rollback por prueba
 │       ├── unit/test_config.py
-│       └── integration/test_walking_skeleton.py         # E2E + invariantes de BD
+│       └── integration/test_walking_skeleton.py         # E2E, 401, carrera de DRAFT e invariantes de BD
 └── frontend/                                            # React + Vite + TS estricto, sin estilos
-    ├── package.json                                     # Script gen:api (openapi-typescript)
+    ├── package.json                                     # gen:api (openapi-typescript), lint (ESLint), format (Prettier)
     └── src/
         ├── api/client.ts + api/generated/schema.d.ts    # Tipos generados desde /openapi.json
-        ├── shared/hooks/                                # useAsyncAction, useHealth
-        └── features/survey/                             # hooks/useSurveyStart, pages/SkeletonCheckPage
+        └── features/survey/                             # hooks/ (useSurveyStart, useBackendHealth), pages/SkeletonCheckPage, types.ts
 ```
 
 ### 3.2 Árbol Objetivo Completo del Monorepo (Integrando `docs/` Existente + Código por Construir)
@@ -230,16 +229,16 @@ $$\text{router} \longrightarrow \text{service} \longrightarrow \begin{cases} \te
 - [x] **2. Esqueleto de Backend (`backend/`):**
   - [x] Configurar `backend/pyproject.toml` (dependencias, `[build-system]`, Ruff, Mypy strict, Pytest).
   - [x] Implementar `src/core/config.py` (`CORS_ORIGINS`, `DEMO_MODE`), `src/core/database.py`, `src/core/schemas.py` (`CamelCaseSchema`), `src/core/auth_deps.py` (401 si el cliente no existe) y `src/core/models.py` (`ClientModel`, fuera de los módulos de dominio según *Data Ownership*).
-  - [x] Configurar Alembic con la migración inicial de las 5 tablas (`8cedce29f65b`) y una segunda revisión con las restricciones del diseño 02 §2.2/§2.5 (`e4a1ef71cbd4`).
+  - [x] Configurar Alembic con la migración inicial de las 5 tablas (`8cedce29f65b`) y una segunda revisión con las restricciones del diseño 02 §2.2/§2.5 (`e4a1ef71cbd4`): CHECKs, `display_order` único en el catálogo activo, trigger de `BR-02` (máx. 10 preguntas activas) y trigger de `completed_at` inmutable.
   - [x] Endpoint E2E `POST /api/v1/surveys/start` (`Router -> SurveyManager -> Repository -> PostgreSQL`) y `GET /api/v1/health` con verificación real de la BD.
   - [x] Script de datos demo idempotente (`scripts/seed_demo.py`) y prueba de humo por CLI (`scripts/smoke_test.sh`).
 - [x] **3. Contrato OpenAPI y Esqueleto de Frontend (`frontend/`):**
   - [x] Inicializar aplicación React + Vite + TypeScript estricto en `frontend/` (pantalla en texto plano, sin estilos: solo verifica conectividad).
   - [x] Configurar script `openapi-typescript` (`npm run gen:api`) que exporta los esquemas de FastAPI a `frontend/src/api/generated/`.
-  - [x] Conectar la pantalla base consumiendo el backend y `pytest` en verde (10 pruebas autocontenidas con rollback).
+  - [x] Conectar la pantalla base consumiendo el backend y `pytest` en verde (13 pruebas autocontenidas con rollback). ESLint + Prettier configurados según `code_style.md` §1.
 - [ ] **4. Cierre:** *merge* a `main` y despliegue en la VM siguiendo `README.md` §2.
 
-**Pendientes conocidos que pasan a los Slices:** manejo de la carrera de `startSurvey` ante conflicto del índice único parcial (diseño 02 §2.4, Slice 3); autenticación real que reemplace `X-User-Id`/`DEMO_MODE`.
+**Pendientes conocidos que pasan a los Slices:** autenticación real que reemplace `X-User-Id`/`DEMO_MODE`. **Inconsistencia documental detectada (no corregida):** `01_Architectural_and_Detailed_Design.md` §3.2 lista `ERROR` en `SurveyStatus`, mientras `02_Interaction_and_Data_Design.md` §2.2/§2.5 lo excluye; el código sigue al `02` (más reciente).
 
 ---
 
