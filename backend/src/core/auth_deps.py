@@ -1,25 +1,48 @@
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import Header, HTTPException, status
+from fastapi import Depends, Header, HTTPException, status
+from sqlalchemy.orm import Session
+
+from src.core.config import settings
+from src.core.database import get_db
+from src.core.models import ClientModel
 
 DEFAULT_DEMO_USER_ID = UUID("11111111-1111-1111-1111-111111111111")
 
+_UNAUTHORIZED_DETAIL = "No fue posible identificar al usuario."
 
-def get_current_user(
-    x_user_id: Annotated[str | None, Header()] = None,
-) -> UUID:
-    """Obtiene el userId autenticado desde el contexto de sesión/cabecera.
 
-    Para el Walking Skeleton (Fase 0), usa el usuario semilla de demostración
-    si no se envía la cabecera X-User-Id.
-    """
+def _unauthorized() -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED, detail=_UNAUTHORIZED_DETAIL
+    )
+
+
+def _parse_user_id(x_user_id: str | None) -> UUID:
+    """Traduce la cabecera X-User-Id a UUID aplicando el modo demo."""
     if x_user_id is None:
+        if not settings.demo_mode:
+            raise _unauthorized()
         return DEFAULT_DEMO_USER_ID
     try:
         return UUID(x_user_id)
     except ValueError as err:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Identificador de usuario inválido.",
-        ) from err
+        raise _unauthorized() from err
+
+
+def get_current_user(
+    db: Annotated[Session, Depends(get_db)],
+    x_user_id: Annotated[str | None, Header()] = None,
+) -> UUID:
+    """Obtiene el userId autenticado desde el contexto de sesión/cabecera.
+
+    Walking Skeleton (Fase 0): sustituye a un módulo de autenticación real
+    (fuera del alcance de REQ-01). El userId nunca se lee del body (REQ-01).
+    Si el cliente no existe en `client` se responde 401 en lugar de dejar que
+    la FK produzca un 500 (contrato `startSurvey`, diseño 02 §3).
+    """
+    user_id = _parse_user_id(x_user_id)
+    if db.get(ClientModel, user_id) is None:
+        raise _unauthorized()
+    return user_id

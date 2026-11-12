@@ -1,6 +1,13 @@
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
+from typing import Annotated
 
+from fastapi import Depends, FastAPI, HTTPException, status
+from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import text
+from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.orm import Session
+
+from src.core.config import settings
+from src.core.database import get_db
 from src.survey.router import router as survey_router
 
 app = FastAPI(
@@ -11,7 +18,7 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_origins=settings.cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -21,6 +28,13 @@ app.include_router(survey_router, prefix="/api/v1")
 
 
 @app.get("/api/v1/health", tags=["Health"])
-def health_check() -> dict[str, str]:
-    """Verifica que el servidor FastAPI esté operativo."""
-    return {"status": "ok"}
+def health_check(db: Annotated[Session, Depends(get_db)]) -> dict[str, str]:
+    """Verifica que FastAPI esté operativo y que PostgreSQL responda."""
+    try:
+        db.execute(text("SELECT 1"))
+    except SQLAlchemyError as err:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="La base de datos no está disponible.",
+        ) from err
+    return {"status": "ok", "database": "ok"}
