@@ -2,20 +2,12 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, status
-from sqlalchemy.orm import Session
 
 from src.core.auth_deps import get_current_user
-from src.core.database import get_db
-from src.survey.repository import SqlAlchemySurveyRepository
 from src.survey.schemas import SurveyStartResponse
-from src.survey.service import SurveyManager
+from src.survey.service import SurveyManager, get_survey_manager
 
 router = APIRouter(prefix="/surveys", tags=["Surveys"])
-
-
-def get_survey_manager(db: Annotated[Session, Depends(get_db)]) -> SurveyManager:
-    """Construye la instancia de SurveyManager con su repositorio."""
-    return SurveyManager(SqlAlchemySurveyRepository(db))
 
 
 @router.post(

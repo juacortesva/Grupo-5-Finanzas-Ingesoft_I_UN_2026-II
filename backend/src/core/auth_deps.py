@@ -39,8 +39,17 @@ def get_current_user(
 
     Walking Skeleton (Fase 0): sustituye a un módulo de autenticación real
     (fuera del alcance de REQ-01). El userId nunca se lee del body (REQ-01).
-    Si el cliente no existe en `client` se responde 401 en lugar de dejar que
-    la FK produzca un 500 (contrato `startSurvey`, diseño 02 §3).
+
+    Args:
+        db: Sesión de base de datos de la petición.
+        x_user_id: Valor de la cabecera `X-User-Id`, si se envió.
+
+    Returns:
+        El `client_id` del cliente autenticado.
+
+    Raises:
+        HTTPException: 401 si la cabecera es inválida, falta sin `DEMO_MODE`
+            o el cliente no existe (contrato `startSurvey`, diseño 02 §3).
     """
     user_id = _parse_user_id(x_user_id)
     if db.get(ClientModel, user_id) is None:

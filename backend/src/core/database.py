@@ -1,6 +1,6 @@
 from collections.abc import Generator
 
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
 from src.core.config import settings
@@ -21,3 +21,15 @@ def get_db() -> Generator[Session, None, None]:
         yield db
     finally:
         db.close()
+
+
+def ping_database(db: Session) -> None:
+    """Ejecuta `SELECT 1` para comprobar la conexión con PostgreSQL.
+
+    Args:
+        db: Sesión activa de SQLAlchemy.
+
+    Raises:
+        SQLAlchemyError: Si la base de datos no responde.
+    """
+    db.execute(text("SELECT 1"))
