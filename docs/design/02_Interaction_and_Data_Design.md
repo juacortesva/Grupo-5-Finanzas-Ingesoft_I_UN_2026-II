@@ -1,18 +1,3 @@
-# Cambios previos requeridos en `01_Architectural_and_Detailed_Design.md`
-
-Antes del `02`, dos ajustes al `01` para que todo sea consistente:
-
-| Sección | Cambio |
-|---|---|
-| §3.2 enum `SurveyStatus` | Eliminar `ERROR`. Solo `{DRAFT, COMPLETED}`. El error vive en `FINANCIAL_PROFILE.evaluation_status`. |
-| §3.2 `SurveyRepository` | Reemplazar `saveDraft` por `saveAnswer(surveyId, userId, answer)`. Mantener `findById(surveyId, userId)`, `findDraftByUserId(userId)`, `save(survey)`. |
-| §3.2 `SurveyManager` | Reemplazar `saveDraft` por `saveAnswer(surveyId, userId, answer)`. Mantener `startSurvey(userId)`, `resumeSurvey(userId)`, `completeSurvey(surveyId, userId)`. |
-| §3.3 | Actualizar la responsabilidad de `SurveyRepository` para incluir `saveAnswer` con validación de estado y ownership. |
-
-Con esto, el `02` queda alineado con `01` y con `REQ-01_definitivo.md`. Abajo el `02` completo.
-
----
-
 # Asesor Financiero Personal — Interaction & Data Design v1.2
 
 | | |
