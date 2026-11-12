@@ -1,3 +1,7 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "asesor-financiero-backend"
 version = "0.1.0"
@@ -9,7 +13,7 @@ dependencies = [
     "psycopg[binary]>=3.2.0",
     "alembic>=1.13.0",
     "pydantic>=2.9.0",
-    "pydantic-settings>=2.5.0",
+    "pydantic-settings>=2.7.0",
 ]
 
 [project.optional-dependencies]
@@ -20,12 +24,21 @@ dev = [
     "mypy>=1.11.0",
 ]
 
+[tool.setuptools.packages.find]
+include = ["src*"]
+
 [tool.ruff]
 line-length = 88
 target-version = "py311"
+# Las revisiones autogeneradas por Alembic siguen su propia plantilla.
+extend-exclude = ["alembic/versions"]
 
 [tool.ruff.lint]
 select = ["E", "W", "F", "I", "N", "UP", "B", "C90"]
+
+[tool.ruff.lint.isort]
+# La carpeta local alembic/ no debe confundirse con el paquete alembic.
+known-third-party = ["alembic"]
 
 [tool.ruff.lint.mccabe]
 max-complexity = 10
@@ -36,5 +49,6 @@ strict = true
 disallow_untyped_defs = true
 no_implicit_optional = true
 plugins = ["pydantic.mypy"]
+
 [tool.pytest.ini_options]
 pythonpath = ["."]
