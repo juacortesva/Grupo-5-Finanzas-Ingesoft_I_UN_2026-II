@@ -1,0 +1,1 @@
+{"root":["./src/main.tsx","./src/api/client.ts","./src/api/generated/schema.d.ts","./src/features/survey/hooks/useSurveyStart.ts","./src/features/survey/pages/SkeletonCheckPage.tsx","./src/shared/hooks/useAsyncAction.ts","./src/shared/hooks/useHealth.ts","./vite.config.ts"],"version":"5.9.3"}
