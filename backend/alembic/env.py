@@ -8,6 +8,7 @@ from sqlalchemy import engine_from_config, pool
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from src.categorization import models as categorization_models  # noqa: E402, F401
+from src.core import models as core_models  # noqa: E402, F401
 from src.core.config import settings  # noqa: E402
 from src.core.database import Base  # noqa: E402
 from src.survey import models as survey_models  # noqa: E402, F401

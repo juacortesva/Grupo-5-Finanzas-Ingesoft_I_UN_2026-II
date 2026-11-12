@@ -2,7 +2,7 @@ from datetime import UTC, datetime
 from decimal import Decimal
 from uuid import UUID, uuid4
 
-from sqlalchemy import DateTime, ForeignKey, Numeric, String
+from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Numeric, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from src.categorization.enums import EvaluationStatus
@@ -13,6 +13,23 @@ class FinancialProfileModel(Base):
     """Categoría de inicio vigente del cliente (BR-01)."""
 
     __tablename__ = "financial_profile"
+    __table_args__ = (
+        CheckConstraint(
+            "assigned_category IN "
+            "('CONSERVATIVE', 'MODERATE', 'AGGRESSIVE', 'UNDER_EVALUATION')",
+            name="ck_financial_profile_category_valid",
+        ),
+        CheckConstraint(
+            "evaluation_status IN ('COMPLETED', 'ERROR')",
+            name="ck_financial_profile_status_valid",
+        ),
+        # REQ-01 Escenario 3: ERROR => UNDER_EVALUATION y total_score nulo.
+        CheckConstraint(
+            "evaluation_status <> 'ERROR' OR "
+            "(assigned_category = 'UNDER_EVALUATION' AND total_score IS NULL)",
+            name="ck_financial_profile_error_is_provisional",
+        ),
+    )
 
     profile_id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
     client_id: Mapped[UUID] = mapped_column(

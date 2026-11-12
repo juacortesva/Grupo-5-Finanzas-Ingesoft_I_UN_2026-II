@@ -4,6 +4,7 @@ from uuid import UUID, uuid4
 
 from sqlalchemy import (
     Boolean,
+    CheckConstraint,
     DateTime,
     ForeignKey,
     Index,
@@ -19,18 +20,6 @@ from src.core.database import Base
 from src.survey.enums import SurveyStatus
 
 
-class ClientModel(Base):
-    """Identidad del cliente autenticado dueño de encuestas y perfil."""
-
-    __tablename__ = "client"
-
-    client_id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
-    email: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
-    )
-
-
 class SurveyModel(Base):
     """Ejecución del cuestionario de onboarding del cliente (REQ-01)."""
 
@@ -42,6 +31,16 @@ class SurveyModel(Base):
             "client_id",
             unique=True,
             postgresql_where=text("status = 'DRAFT'"),
+        ),
+        # Diseño 02 §2.2: SURVEY.status no contiene ERROR.
+        CheckConstraint(
+            "status IN ('DRAFT', 'COMPLETED')", name="ck_survey_status_valid"
+        ),
+        # Diseño 02 §2.2: completed_at solo si status = COMPLETED.
+        CheckConstraint(
+            "(status = 'DRAFT' AND completed_at IS NULL)"
+            " OR (status = 'COMPLETED' AND completed_at IS NOT NULL)",
+            name="ck_survey_completed_at_consistent",
         ),
     )
 
@@ -70,6 +69,16 @@ class QuestionModel(Base):
     """Catálogo de preguntas parametrizadas de la encuesta (BR-02: máx. 10 activas)."""
 
     __tablename__ = "question"
+    __table_args__ = (
+        CheckConstraint("weight >= 0", name="ck_question_weight_non_negative"),
+        # Diseño 02 §2.2: display_order único dentro del catálogo activo.
+        Index(
+            "ix_question_active_display_order",
+            "display_order",
+            unique=True,
+            postgresql_where=text("is_active"),
+        ),
+    )
 
     question_id: Mapped[int] = mapped_column(
         Integer, primary_key=True, autoincrement=True
@@ -89,6 +98,9 @@ class AnswerModel(Base):
     __tablename__ = "answer"
     __table_args__ = (
         UniqueConstraint("survey_id", "question_id", name="uq_answer_survey_question"),
+        CheckConstraint(
+            "selected_option > 0", name="ck_answer_selected_option_positive"
+        ),
     )
 
     answer_id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
