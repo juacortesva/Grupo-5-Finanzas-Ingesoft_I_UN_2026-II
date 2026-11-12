@@ -5,8 +5,8 @@
 | **Equipo** | Grupo 5 (`@KevinVerjan`, `@Estebandido-exe`, `@josuarezvi`, `@juacortesva`) |
 | **Ubicación** | `docs/project_status.md` |
 | **Asignatura** | Ingeniería de Software I — Universidad Nacional de Colombia (UNAL) 2026-II |
-| **Última Actualización** | 2026-11-11 |
-| **Estado Global** | Diseño completado y validado / Próxima etapa: **Fase 0 — Walking Skeleton** (`ADR-0002`) |
+| **Última Actualización** | 2026-11-12 |
+| **Estado Global** | **Fase 0 — Walking Skeleton** completada en `feat/walking-skeleton-db` (pendiente de *merge* y despliegue en la VM) / Próxima etapa: **Slice 1** |
 | **Referencias** | `docs/code_style.md`, `docs/estructura_repositorio.md`, `docs/adr/adr-0001.md`, `docs/adr/adr_0002.md`, `docs/req/REQ-01.md`, `docs/design/01_Architectural_and_Detailed_Design.md`, `docs/design/02_Interaction_and_Data_Design.md` |
 
 ---
@@ -46,27 +46,38 @@ Aplicación web interactiva que permite a los usuarios descubrir y registrar su 
 
 ## 3. Estructura de Directorios (Realidad Actual vs. Arquitectura Objetivo)
 
-### 3.1 Estado Actual en el Repositorio (`origin/main`)
-Actualmente el repositorio contiene **exclusivamente la documentación de ingeniería aprobada**. Aún no se han creado las carpetas `backend/`, `frontend/` ni el archivo `docker-compose.yml`:
+### 3.1 Estado Actual en el Repositorio (`feat/walking-skeleton-db`)
+La rama del *Walking Skeleton* agrega `backend/`, `frontend/` y `docker-compose.yml` sobre la documentación existente:
 
 ```text
 Grupo-5-Finanzas-Ingesoft_I_UN_2026-II/
-├── README.md
-└── docs/
-    ├── code_style.md                                    # Estándares Ruff, ESLint, Decimal, Logs
-    ├── estructura_repositorio.md                        # Reglas de monorepo y capas
-    ├── project_status.md                                # Estado actualizado del proyecto (este archivo)
-    ├── adr/
-    │   ├── adr-0001.md                                  # Selección del Stack (React, FastAPI, PostgreSQL)
-    │   └── adr_0002.md                                  # Estrategia Walking Skeleton + Vertical Slices
-    ├── design/
-    │   ├── 01_Architectural_and_Detailed_Design.md      # Componentes, diagramas de clases y responsabilidades
-    │   └── 02_Interaction_and_Data_Design.md            # Diagramas de secuencia, modelo ER y contratos
-    ├── req/
-    │   ├── REQ-01.md                                    # Requerimiento Capstone validado (US-01, AC-01.1 a 01.3)
-    │   └── REQ-02.md                                    # Plantilla vacía para futuro requerimiento
-    └── rfc/
-        └── rfc_proyecto.md                              # Propuesta conceptual inicial
+├── README.md                                            # Arranque local y despliegue en la VM
+├── docker-compose.yml                                   # PostgreSQL 16 local (volumen + healthcheck)
+├── docs/                                                # Sin cambios de estructura (ver 3.2)
+├── backend/
+│   ├── .env.example                                     # DATABASE_URL genérica, CORS_ORIGINS, DEMO_MODE
+│   ├── pyproject.toml                                   # build-system, Ruff, Mypy strict, Pytest
+│   ├── alembic/versions/
+│   │   ├── 8cedce29f65b_create_initial_schema_for_req_01.py   # 5 tablas del modelo ER
+│   │   └── e4a1ef71cbd4_add_design_constraints_for_req_01.py  # CHECKs + display_order único activo
+│   ├── scripts/
+│   │   ├── seed_demo.py                                 # Cliente demo + 3 preguntas (idempotente)
+│   │   └── smoke_test.sh                                # Prueba de humo por CLI (curl)
+│   ├── src/
+│   │   ├── main.py                                      # CORS desde Settings, /api/v1/health con SELECT 1
+│   │   ├── core/                                        # config, database, auth_deps, schemas, models (ClientModel)
+│   │   ├── survey/                                      # router, service, repository, models, schemas, enums
+│   │   └── categorization/                              # models (FinancialProfileModel), enums
+│   └── tests/
+│       ├── conftest.py                                  # Transacción con rollback por prueba
+│       ├── unit/test_config.py
+│       └── integration/test_walking_skeleton.py         # E2E + invariantes de BD
+└── frontend/                                            # React + Vite + TS estricto, sin estilos
+    ├── package.json                                     # Script gen:api (openapi-typescript)
+    └── src/
+        ├── api/client.ts + api/generated/schema.d.ts    # Tipos generados desde /openapi.json
+        ├── shared/hooks/                                # useAsyncAction, useHealth
+        └── features/survey/                             # hooks/useSurveyStart, pages/SkeletonCheckPage
 ```
 
 ### 3.2 Árbol Objetivo Completo del Monorepo (Integrando `docs/` Existente + Código por Construir)
@@ -104,7 +115,7 @@ Grupo-5-Finanzas-Ingesoft_I_UN_2026-II/
 │   │   │   ├── repository.py                            # ISurveyRepository + implementación SQLAlchemy
 │   │   │   ├── models.py                                # Tablas SURVEY, QUESTION, ANSWER
 │   │   │   ├── schemas.py                               # DTOs Pydantic de entrada/salida (CamelCaseSchema)
-│   │   │   └── enums.py                                 # SurveyStatus (DRAFT, COMPLETED, ERROR)
+│   │   │   └── enums.py                                 # SurveyStatus (DRAFT, COMPLETED); ERROR vive en evaluation_status
 │   │   └── categorization/                              # Módulo Categorization (REQ-01)
 │   │       ├── router.py                                # Categorization Router
 │   │       ├── service.py                               # CategorizationService (orquestación y fallback Escenario 3)
@@ -210,21 +221,25 @@ $$\text{router} \longrightarrow \text{service} \longrightarrow \begin{cases} \te
 
 ---
 
-### [ ] Fase 0: Walking Skeleton (Pendiente — Prioridad Inmediata)
+### [x] Fase 0: Walking Skeleton (Completada en `feat/walking-skeleton-db` — 2026-11-12)
 *Objetivo: Dejar operativa toda la tubería tecnológica E2E antes de codificar las reglas financieras. Criterio de salida: clonar repo, levantar contenedores/servicios, ver una petición viajando desde React hasta PostgreSQL y pasar `pytest` en verde.*
 
-- [ ] **1. Infraestructura y Base de Datos:**
-  - [ ] Crear `docker-compose.yml` en la raíz con PostgreSQL, volumen persistente y *healthcheck*.
-  - [ ] Crear `.env.example` y `.gitignore` para Python, Node y entornos locales.
-- [ ] **2. Esqueleto de Backend (`backend/`):**
-  - [ ] Configurar `backend/pyproject.toml` (dependencias: `fastapi`, `uvicorn`, `sqlalchemy`, `psycopg`/`asyncpg`, `alembic`, `pydantic`, `pydantic-settings`; dev: `pytest`, `ruff`, `mypy`, `httpx`).
-  - [ ] Implementar `src/core/config.py`, `src/core/database.py`, `src/core/schemas.py` (`CamelCaseSchema`) y `src/core/auth_deps.py` (dependencia de `user_id`).
-  - [ ] Configurar Alembic (`alembic/`) y generar la migración inicial con las 5 tablas del modelo ER (`CLIENT`, `SURVEY`, `QUESTION`, `ANSWER`, `FINANCIAL_PROFILE`).
-  - [ ] Crear estructura base de paquetes en `src/survey/` y `src/categorization/` junto con un endpoint de conectividad E2E en `src/main.py`.
-- [ ] **3. Contrato OpenAPI y Esqueleto de Frontend (`frontend/`):**
-  - [ ] Inicializar aplicación React + Vite + TypeScript en `frontend/`.
-  - [ ] Configurar script `openapi-typescript` en `package.json` para exportar esquemas de FastAPI a `frontend/src/api/generated/`.
-  - [ ] Conectar pantalla base en React consumiendo el backend y ejecutando primera prueba en verde con `pytest`.
+- [x] **1. Infraestructura y Base de Datos:**
+  - [x] Crear `docker-compose.yml` en la raíz con PostgreSQL, volumen persistente y *healthcheck* (solo desarrollo local; la VM usa la BD provista por el profesor).
+  - [x] Crear `.env.example` (sin IP ni credenciales reales) y `.gitignore` para Python, Node y entornos locales.
+- [x] **2. Esqueleto de Backend (`backend/`):**
+  - [x] Configurar `backend/pyproject.toml` (dependencias, `[build-system]`, Ruff, Mypy strict, Pytest).
+  - [x] Implementar `src/core/config.py` (`CORS_ORIGINS`, `DEMO_MODE`), `src/core/database.py`, `src/core/schemas.py` (`CamelCaseSchema`), `src/core/auth_deps.py` (401 si el cliente no existe) y `src/core/models.py` (`ClientModel`, fuera de los módulos de dominio según *Data Ownership*).
+  - [x] Configurar Alembic con la migración inicial de las 5 tablas (`8cedce29f65b`) y una segunda revisión con las restricciones del diseño 02 §2.2/§2.5 (`e4a1ef71cbd4`).
+  - [x] Endpoint E2E `POST /api/v1/surveys/start` (`Router -> SurveyManager -> Repository -> PostgreSQL`) y `GET /api/v1/health` con verificación real de la BD.
+  - [x] Script de datos demo idempotente (`scripts/seed_demo.py`) y prueba de humo por CLI (`scripts/smoke_test.sh`).
+- [x] **3. Contrato OpenAPI y Esqueleto de Frontend (`frontend/`):**
+  - [x] Inicializar aplicación React + Vite + TypeScript estricto en `frontend/` (pantalla en texto plano, sin estilos: solo verifica conectividad).
+  - [x] Configurar script `openapi-typescript` (`npm run gen:api`) que exporta los esquemas de FastAPI a `frontend/src/api/generated/`.
+  - [x] Conectar la pantalla base consumiendo el backend y `pytest` en verde (10 pruebas autocontenidas con rollback).
+- [ ] **4. Cierre:** *merge* a `main` y despliegue en la VM siguiendo `README.md` §2.
+
+**Pendientes conocidos que pasan a los Slices:** manejo de la carrera de `startSurvey` ante conflicto del índice único parcial (diseño 02 §2.4, Slice 3); autenticación real que reemplace `X-User-Id`/`DEMO_MODE`.
 
 ---
 
