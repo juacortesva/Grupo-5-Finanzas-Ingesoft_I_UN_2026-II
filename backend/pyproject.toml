@@ -30,8 +30,6 @@ include = ["src*"]
 [tool.ruff]
 line-length = 88
 target-version = "py311"
-# Las revisiones autogeneradas por Alembic siguen su propia plantilla.
-extend-exclude = ["alembic/versions"]
 
 [tool.ruff.lint]
 select = ["E", "W", "F", "I", "N", "UP", "B", "C90"]
