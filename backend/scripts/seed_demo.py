@@ -41,7 +41,14 @@ DEMO_QUESTIONS: tuple[DemoQuestion, ...] = (
 
 
 def seed_client(db: Session) -> bool:
-    """Crea el cliente demo si no existe. Retorna True si lo insertó."""
+    """Crea el cliente demo si no existe.
+
+    Args:
+        db: Sesión dentro de la transacción del seed.
+
+    Returns:
+        True si insertó el cliente; False si ya existía.
+    """
     if db.get(ClientModel, DEFAULT_DEMO_USER_ID) is not None:
         return False
     db.add(ClientModel(client_id=DEFAULT_DEMO_USER_ID, email=DEMO_EMAIL))
@@ -49,7 +56,14 @@ def seed_client(db: Session) -> bool:
 
 
 def seed_questions(db: Session) -> int:
-    """Inserta las preguntas demo cuyo display_order activo aún no existe."""
+    """Inserta las preguntas demo cuyo `display_order` activo aún no existe.
+
+    Args:
+        db: Sesión dentro de la transacción del seed.
+
+    Returns:
+        Cantidad de preguntas insertadas.
+    """
     used_orders = set(
         db.scalars(
             select(QuestionModel.display_order).where(QuestionModel.is_active)
