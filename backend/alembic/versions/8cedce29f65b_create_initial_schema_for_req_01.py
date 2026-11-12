@@ -1,0 +1,122 @@
+"""create initial schema for req_01
+
+Crea las 5 tablas del modelo ER de `02_Interaction_and_Data_Design.md` §2.2.
+
+Revision ID: 8cedce29f65b
+Revises:
+Create Date: 2026-11-12 00:32:33.706720
+
+"""
+
+from collections.abc import Sequence
+
+import sqlalchemy as sa
+from alembic import op
+
+revision: str = "8cedce29f65b"
+down_revision: str | Sequence[str] | None = None
+branch_labels: str | Sequence[str] | None = None
+depends_on: str | Sequence[str] | None = None
+
+
+def _create_client() -> None:
+    op.create_table(
+        "client",
+        sa.Column("client_id", sa.Uuid(), nullable=False),
+        sa.Column("email", sa.String(length=255), nullable=False),
+        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
+        sa.PrimaryKeyConstraint("client_id"),
+        sa.UniqueConstraint("email"),
+    )
+
+
+def _create_question() -> None:
+    op.create_table(
+        "question",
+        sa.Column("question_id", sa.Integer(), autoincrement=True, nullable=False),
+        sa.Column("text", sa.String(length=500), nullable=False),
+        sa.Column("weight", sa.Numeric(precision=10, scale=4), nullable=False),
+        sa.Column("display_order", sa.Integer(), nullable=False),
+        sa.Column("is_required", sa.Boolean(), nullable=False),
+        sa.Column("is_active", sa.Boolean(), nullable=False),
+        sa.PrimaryKeyConstraint("question_id"),
+    )
+
+
+def _create_survey() -> None:
+    op.create_table(
+        "survey",
+        sa.Column("survey_id", sa.Uuid(), nullable=False),
+        sa.Column("client_id", sa.Uuid(), nullable=False),
+        sa.Column("status", sa.String(length=20), nullable=False),
+        sa.Column("started_at", sa.DateTime(timezone=True), nullable=False),
+        sa.Column("completed_at", sa.DateTime(timezone=True), nullable=True),
+        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
+        sa.ForeignKeyConstraint(["client_id"], ["client.client_id"]),
+        sa.PrimaryKeyConstraint("survey_id"),
+    )
+    op.create_index(op.f("ix_survey_client_id"), "survey", ["client_id"], unique=False)
+    # REQ-01 Escenario 2: a lo sumo un DRAFT por cliente.
+    op.create_index(
+        "ix_survey_one_draft_per_client",
+        "survey",
+        ["client_id"],
+        unique=True,
+        postgresql_where=sa.text("status = 'DRAFT'"),
+    )
+
+
+def _create_answer() -> None:
+    op.create_table(
+        "answer",
+        sa.Column("answer_id", sa.Uuid(), nullable=False),
+        sa.Column("survey_id", sa.Uuid(), nullable=False),
+        sa.Column("question_id", sa.Integer(), nullable=False),
+        sa.Column("selected_option", sa.Integer(), nullable=False),
+        sa.Column("option_value", sa.Numeric(precision=10, scale=4), nullable=False),
+        sa.ForeignKeyConstraint(["question_id"], ["question.question_id"]),
+        sa.ForeignKeyConstraint(["survey_id"], ["survey.survey_id"]),
+        sa.PrimaryKeyConstraint("answer_id"),
+        sa.UniqueConstraint(
+            "survey_id", "question_id", name="uq_answer_survey_question"
+        ),
+    )
+    op.create_index(op.f("ix_answer_survey_id"), "answer", ["survey_id"], unique=False)
+
+
+def _create_financial_profile() -> None:
+    op.create_table(
+        "financial_profile",
+        sa.Column("profile_id", sa.Uuid(), nullable=False),
+        sa.Column("client_id", sa.Uuid(), nullable=False),
+        sa.Column("survey_id", sa.Uuid(), nullable=False),
+        sa.Column("assigned_category", sa.String(length=30), nullable=False),
+        sa.Column("evaluation_status", sa.String(length=20), nullable=False),
+        sa.Column("total_score", sa.Numeric(precision=10, scale=4), nullable=True),
+        sa.Column("assigned_at", sa.DateTime(timezone=True), nullable=False),
+        sa.ForeignKeyConstraint(["client_id"], ["client.client_id"]),
+        sa.ForeignKeyConstraint(["survey_id"], ["survey.survey_id"]),
+        sa.PrimaryKeyConstraint("profile_id"),
+        sa.UniqueConstraint("client_id"),
+    )
+
+
+def upgrade() -> None:
+    """Crea las tablas en orden de dependencias de llaves foráneas."""
+    _create_client()
+    _create_question()
+    _create_survey()
+    _create_answer()
+    _create_financial_profile()
+
+
+def downgrade() -> None:
+    """Elimina las tablas en orden inverso de dependencias."""
+    op.drop_table("financial_profile")
+    op.drop_index(op.f("ix_answer_survey_id"), table_name="answer")
+    op.drop_table("answer")
+    op.drop_index("ix_survey_one_draft_per_client", table_name="survey")
+    op.drop_index(op.f("ix_survey_client_id"), table_name="survey")
+    op.drop_table("survey")
+    op.drop_table("question")
+    op.drop_table("client")
