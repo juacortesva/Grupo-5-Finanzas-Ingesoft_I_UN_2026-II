@@ -1,0 +1,94 @@
+{
+  "$schema": "./contract.schema.json",
+  "id": "findById",
+  "pythonName": "find_by_id",
+  "module": "survey",
+  "owner": "SurveyRepository",
+  "kind": "repository",
+  "source": {
+    "document": "docs/design/02_Interaction_and_Data_Design.md",
+    "section": "§3.2 (contrato) y §1.3 (violación de ownership)",
+    "documentVersion": "v1.2 (PR #13)"
+  },
+  "traceability": [
+    "REQ-01 Mitigación de riesgo (acceso no autorizado)"
+  ],
+  "purpose": "Recuperar una encuesta por id solo si pertenece al usuario autenticado. Es la última línea de defensa de ownership.",
+  "input": [
+    {
+      "name": "surveyId",
+      "pythonName": "survey_id",
+      "type": "UUID",
+      "constraints": "No nulo.",
+      "source": "Lo recibe de SurveyManager."
+    },
+    {
+      "name": "userId",
+      "pythonName": "user_id",
+      "type": "UUID",
+      "constraints": "No nulo. Corresponde a CLIENT.client_id.",
+      "source": "Lo recibe de SurveyManager (originado en get_current_user)."
+    }
+  ],
+  "output": {
+    "type": "Survey (DRAFT o COMPLETED) | null"
+  },
+  "preconditions": [],
+  "postconditions": [
+    "Devuelve la encuesta, sea DRAFT o COMPLETED, solo si client_id = userId.",
+    "No modifica estado."
+  ],
+  "failureOutcomes": [
+    {
+      "error": null,
+      "condition": "La encuesta no existe o no es del userId.",
+      "httpStatus": 404,
+      "resultingState": "Devuelve null; el servicio lanza NotFoundError y el Router lo traduce a 404 (nunca 403, para no filtrar existencia)."
+    }
+  ],
+  "invariants": [
+    "La query filtra con WHERE survey_id = :surveyId AND client_id = :userId (no se filtra en memoria)."
+  ],
+  "concurrency": {
+    "strategy": "Variante con bloqueo (SELECT ... FOR UPDATE) cuando la usan saveAnswer o completeSurvey dentro de su transacción (§2.4).",
+    "expectedBehavior": "Serializa escrituras sobre la misma encuesta."
+  },
+  "collaborators": [],
+  "dataConstraints": [],
+  "testableExamples": [
+    {
+      "case": "Encuesta propia",
+      "before": "S1 de C1.",
+      "request": "findById(S1, C1)",
+      "expected": "S1.",
+      "origin": "§3.2"
+    },
+    {
+      "case": "Encuesta ajena",
+      "before": "S2 de C2.",
+      "request": "findById(S2, C1)",
+      "expected": "null (→ 404 en el Router).",
+      "origin": "§1.3"
+    },
+    {
+      "case": "Inexistente",
+      "before": "—",
+      "request": "findById(Sx, C1)",
+      "expected": "null (→ 404, indistinguible del caso ajeno).",
+      "origin": "§1.3"
+    }
+  ],
+  "httpBinding": {
+    "status": "NOT_APPLICABLE",
+    "note": "Operación interna de repositorio; se expone indirectamente a través de saveAnswer, completeSurvey y una futura consulta de encuesta."
+  },
+  "implementation": {
+    "status": "PENDING",
+    "plannedSlice": "Slice 1",
+    "branch": null,
+    "code": [],
+    "tests": []
+  },
+  "openQuestions": [],
+  "relatedCorrections": []
+}

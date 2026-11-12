@@ -1,0 +1,173 @@
+{
+  "$schema": "./contract.schema.json",
+  "id": "saveAnswer",
+  "pythonName": "save_answer",
+  "module": "survey",
+  "owner": "SurveyManager",
+  "kind": "service",
+  "source": {
+    "document": "docs/design/02_Interaction_and_Data_Design.md",
+    "section": "§3.2 (contrato), §2.4 (concurrencia), §1.1 y §1.3 (diagramas)",
+    "documentVersion": "v1.2 (PR #13)"
+  },
+  "traceability": [
+    "REQ-01 Escenario 2 (persistencia progresiva)",
+    "REQ-01 Mitigación de riesgo (ownership)"
+  ],
+  "purpose": "Persistir de forma progresiva la respuesta del cliente a una pregunta de su encuesta en DRAFT. Reemplaza al antiguo saveDraft batch.",
+  "input": [
+    {
+      "name": "surveyId",
+      "pythonName": "survey_id",
+      "type": "UUID",
+      "constraints": "No nulo.",
+      "source": "Parámetro de ruta HTTP."
+    },
+    {
+      "name": "userId",
+      "pythonName": "user_id",
+      "type": "UUID",
+      "constraints": "No nulo. Corresponde a CLIENT.client_id.",
+      "source": "Contexto de autenticación: Depends(get_current_user). Nunca del body HTTP."
+    },
+    {
+      "name": "answer",
+      "pythonName": "answer",
+      "type": "{ questionId: int, selectedOption: int }",
+      "constraints": "selectedOption entero positivo y válido para la pregunta. optionValue NO viene del cliente: el backend lo resuelve como Decimal.",
+      "source": "Body HTTP."
+    }
+  ],
+  "output": {
+    "type": "void",
+    "description": "void (o ok)."
+  },
+  "preconditions": [
+    "Existe SURVEY con survey_id = surveyId y client_id = userId.",
+    "status = DRAFT.",
+    "questionId existe en el catálogo vigente."
+  ],
+  "postconditions": [
+    "La fila ANSWER para (surveyId, questionId) queda insertada o actualizada (upsert).",
+    "SURVEY.updated_at se actualiza."
+  ],
+  "failureOutcomes": [
+    {
+      "error": "NotFoundError",
+      "condition": "La encuesta no existe o no pertenece al userId.",
+      "httpStatus": 404,
+      "resultingState": "Sin alterar datos existentes."
+    },
+    {
+      "error": "InvalidStateError",
+      "condition": "status = COMPLETED.",
+      "httpStatus": 409,
+      "resultingState": "Sin alterar datos existentes."
+    },
+    {
+      "error": "ValidationError",
+      "condition": "questionId no existe en el catálogo (o la opción no es válida para la pregunta).",
+      "httpStatus": 422,
+      "resultingState": "Sin alterar datos existentes."
+    }
+  ],
+  "invariants": [
+    "Una respuesta por (survey_id, question_id).",
+    "Una encuesta COMPLETED no acepta saveAnswer.",
+    "404 y nunca 403 ante encuestas ajenas (§1.3)."
+  ],
+  "concurrency": {
+    "strategy": "En una transacción, bloquear la fila SURVEY (SELECT ... FOR UPDATE o equivalente), comprobar client_id y status, validar pregunta/opción y hacer el upsert de ANSWER.",
+    "expectedBehavior": "La comprobación de ownership/estado y la escritura quedan serializadas respecto a completeSurvey."
+  },
+  "collaborators": [
+    "SurveyRepository.findById",
+    "SurveyRepository.saveAnswer"
+  ],
+  "dataConstraints": [
+    {
+      "rule": "Una respuesta por pregunta y encuesta",
+      "enforcement": "uq_answer_survey_question",
+      "implemented": true
+    },
+    {
+      "rule": "selected_option > 0",
+      "enforcement": "ck_answer_selected_option_positive",
+      "implemented": true
+    },
+    {
+      "rule": "option_value NUMERIC no nulo",
+      "enforcement": "answer.option_value NUMERIC(10,4) NOT NULL",
+      "implemented": true
+    },
+    {
+      "rule": "COMPLETED no vuelve a DRAFT",
+      "enforcement": "trg_survey_completed_at_immutable + ck_survey_completed_at_consistent",
+      "implemented": true
+    }
+  ],
+  "testableExamples": [
+    {
+      "case": "Respuesta nueva",
+      "before": "S1 DRAFT de C1, sin respuesta a Q1.",
+      "request": "saveAnswer(S1, C1, {Q1, 2})",
+      "expected": "ANSWER(S1,Q1) creada con optionValue resuelto; updated_at cambia.",
+      "origin": "derivado de §3.2"
+    },
+    {
+      "case": "Cambio de respuesta",
+      "before": "ANSWER(S1,Q1) con opción 2.",
+      "request": "saveAnswer(S1, C1, {Q1, 3})",
+      "expected": "Misma fila actualizada a opción 3 (upsert).",
+      "origin": "derivado de §3.2"
+    },
+    {
+      "case": "Encuesta ajena",
+      "before": "S2 pertenece a C2.",
+      "request": "saveAnswer(S2, C1, {Q1, 1})",
+      "expected": "404; S2 sin cambios.",
+      "origin": "§1.3"
+    },
+    {
+      "case": "Encuesta cerrada",
+      "before": "S1 COMPLETED.",
+      "request": "saveAnswer(S1, C1, {Q1, 1})",
+      "expected": "409; sin cambios.",
+      "origin": "§3.2"
+    },
+    {
+      "case": "Pregunta inexistente",
+      "before": "S1 DRAFT.",
+      "request": "saveAnswer(S1, C1, {Q99, 1})",
+      "expected": "422; sin cambios.",
+      "origin": "§3.2"
+    }
+  ],
+  "httpBinding": {
+    "status": "PROPOSED",
+    "method": "PUT",
+    "path": "/api/v1/surveys/{surveyId}/answers",
+    "request": "Body: { questionId, selectedOption } en camelCase. Sin userId.",
+    "responses": {
+      "204": "Guardado",
+      "404": "NotFoundError",
+      "409": "InvalidStateError",
+      "422": "ValidationError"
+    },
+    "note": "Propuesta NO normativa: el diseño 02 no fija ruta ni verbo. Acordar antes del Slice."
+  },
+  "implementation": {
+    "status": "PENDING",
+    "plannedSlice": "Slice 1 (captura) y Slice 3 (borrador)",
+    "branch": null,
+    "code": [],
+    "tests": []
+  },
+  "openQuestions": [
+    "Catálogo de opciones de respuesta: cómo validar que selectedOption pertenece a la pregunta y de dónde sale optionValue (02 §5)."
+  ],
+  "relatedCorrections": [
+    "DC-02",
+    "DC-03"
+  ]
+}

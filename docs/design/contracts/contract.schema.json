@@ -1,0 +1,217 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "contract.schema.json",
+  "title": "Contrato de interfaz — Asesor Financiero Personal",
+  "type": "object",
+  "required": [
+    "id",
+    "pythonName",
+    "module",
+    "owner",
+    "kind",
+    "source",
+    "traceability",
+    "purpose",
+    "input",
+    "output",
+    "preconditions",
+    "postconditions",
+    "failureOutcomes",
+    "invariants",
+    "testableExamples",
+    "httpBinding",
+    "implementation"
+  ],
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z][A-Za-z]+$"
+    },
+    "pythonName": {
+      "type": "string",
+      "pattern": "^[a-z][a-z_]+$"
+    },
+    "module": {
+      "enum": [
+        "survey",
+        "categorization"
+      ]
+    },
+    "owner": {
+      "type": "string"
+    },
+    "kind": {
+      "enum": [
+        "service",
+        "repository",
+        "engine"
+      ]
+    },
+    "source": {
+      "type": "object",
+      "required": [
+        "document",
+        "section",
+        "documentVersion"
+      ]
+    },
+    "traceability": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "minItems": 1
+    },
+    "purpose": {
+      "type": "string"
+    },
+    "input": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "name",
+          "pythonName",
+          "type",
+          "source"
+        ]
+      }
+    },
+    "output": {
+      "type": "object",
+      "required": [
+        "type"
+      ]
+    },
+    "preconditions": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "postconditions": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "minItems": 1
+    },
+    "failureOutcomes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "error",
+          "condition",
+          "httpStatus",
+          "resultingState"
+        ],
+        "properties": {
+          "error": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "httpStatus": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          }
+        }
+      }
+    },
+    "invariants": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "concurrency": {
+      "type": "object",
+      "required": [
+        "strategy",
+        "expectedBehavior"
+      ]
+    },
+    "collaborators": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "dataConstraints": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "rule",
+          "enforcement",
+          "implemented"
+        ]
+      }
+    },
+    "testableExamples": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": [
+          "case",
+          "before",
+          "request",
+          "expected",
+          "origin"
+        ]
+      }
+    },
+    "httpBinding": {
+      "type": "object",
+      "required": [
+        "status"
+      ],
+      "properties": {
+        "status": {
+          "enum": [
+            "IMPLEMENTED",
+            "PROPOSED",
+            "NOT_APPLICABLE"
+          ]
+        }
+      }
+    },
+    "implementation": {
+      "type": "object",
+      "required": [
+        "status",
+        "plannedSlice"
+      ],
+      "properties": {
+        "status": {
+          "enum": [
+            "IMPLEMENTED",
+            "PENDING"
+          ]
+        }
+      }
+    },
+    "openQuestions": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "relatedCorrections": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^DC-[0-9]{2}$"
+      }
+    }
+  },
+  "additionalProperties": false
+}
