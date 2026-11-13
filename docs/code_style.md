@@ -4,7 +4,7 @@
 | :--- | :--- |
 | **Equipo** | Grupo 5 (`@KevinVerjan`, `@Estebandido-exe`, `@josuarezvi`, `@juacortesva`) |
 | **Stack Cubierto** | Python 3.11+ (FastAPI / SQLAlchemy / Pydantic), TypeScript 5+ (React / Vite), PostgreSQL |
-| **Referencias** | `docs/adr/adr-0001.md`, `docs/adr/adr-0002.md`, `docs/req/REQ-01.md`, `docs/design/01_Architectural_and_Detailed_Design.md`, `docs/design/02_Interaction_and_Data_Design.md` |
+| **Referencias** | `docs/adr/adr-0001.md` a `adr-0006.md`, `docs/req/REQ-01.md`, `docs/design/01_Architectural_and_Detailed_Design.md`, `docs/design/02_Interaction_and_Data_Design.md`, `docs/contracts/` |
 
 ---
 
@@ -35,8 +35,8 @@ Adoptamos **estilo idiomático por lenguaje** con conversión automática en la 
 
 En los documentos de diseño (`01_Architectural_and_Detailed_Design.md` y `02_Interaction_and_Data_Design.md`), las operaciones están expresadas en `camelCase` estándar de UML. En Python se traducen directamente a `snake_case`:
 
-* UML `evaluateProfile(userId, surveyId, answers)` $\rightarrow$ Python `evaluate_profile(self, user_id: UUID, survey_id: UUID, answers: list[Answer])`
-* UML `calculateScore(answers)` $\rightarrow$ Python `calculate_score(self, answers: list[Answer])`
+* UML `evaluateProfile(userId, surveyId, answers)` $\rightarrow$ Python `evaluate_profile(self, user_id: UUID, survey_id: UUID, answers: list[ScoredAnswerDTO])`
+* UML `calculateScore(answers)` $\rightarrow$ Python `calculate_score(self, answers: list[ScoredAnswerDTO])`
 * UML `determineCategory(score)` $\rightarrow$ Python `determine_category(self, score: Decimal)`
 * UML `findDraftByUserId(userId)` $\rightarrow$ Python `find_draft_by_user_id(self, user_id: UUID)`
 
@@ -49,7 +49,7 @@ def calcPuntaje(usrId: UUID, rtas: list):
     return totScore
 
 # ✅ BIEN: Inglés claro, snake_case idiomático y tipos explícitos del dominio
-def calculate_score(self, answers: list[Answer]) -> Decimal:
+def calculate_score(self, answers: list[ScoredAnswerDTO]) -> Decimal:
     total_score = Decimal("0.00")
     return total_score
 ```
@@ -72,25 +72,29 @@ def calculate_score(self, answers: list[Answer]) -> Decimal:
 
 ```python
 # ❌ MAL: Anidamiento excesivo (Arrow Anti-pattern)
-def save_answer(self, survey_id: UUID, user_id: UUID, answer: Answer) -> None:
+def save_answer(self, survey_id: UUID, user_id: UUID, answer: AnswerInput) -> None:
     survey = self._survey_repo.find_by_id(survey_id, user_id)
     if survey is not None:
         if survey.status == SurveyStatus.DRAFT:
-            self._survey_repo.save_answer(survey_id, user_id, answer)
+            applied = self._survey_repo.save_answer(survey_id, user_id, answer)
+            if not applied:
+                raise InvalidStateError("No se altera una encuesta cerrada.")
         else:
             raise InvalidStateError("No se altera una encuesta cerrada.")
     else:
         raise NotFoundError("Encuesta no encontrada.")
 
-# ✅ BIEN: Cláusulas de guarda planas y legibles
-def save_answer(self, survey_id: UUID, user_id: UUID, answer: Answer) -> None:
+# ✅ BIEN: Cláusulas de guarda planas y verificación atómica (ADR-0004 / CT-08)
+def save_answer(self, survey_id: UUID, user_id: UUID, answer: AnswerInput) -> None:
     survey = self._survey_repo.find_by_id(survey_id, user_id)
     if survey is None:
         raise NotFoundError("Encuesta no encontrada.")
     if survey.status != SurveyStatus.DRAFT:
         raise InvalidStateError("No se altera una encuesta cerrada.")
 
-    self._survey_repo.save_answer(survey_id, user_id, answer)
+    applied = self._survey_repo.save_answer(survey_id, user_id, answer)
+    if not applied:
+        raise InvalidStateError("No se altera una encuesta cerrada.")
 ```
 
 ---
@@ -193,17 +197,21 @@ except Exception as err:
         },
     )
     provisional_category = FinancialCategory.UNDER_EVALUATION
+    provisional_evaluation = ProfileEvaluation(
+        survey_id=survey_id,
+        assigned_category=provisional_category,
+        evaluation_status=EvaluationStatus.ERROR,
+        total_score=None,
+    )
     self._profile_repo.save_category(
         user_id=user_id,
-        survey_id=survey_id,
-        category=provisional_category,
-        status="ERROR",
+        evaluation=provisional_evaluation,
     )
     return EvaluationResult(
         survey_id=survey_id,
         assigned_category=provisional_category,
+        evaluation_status=EvaluationStatus.ERROR,
         total_score=None,
-        status="ERROR",
     )
 ```
 

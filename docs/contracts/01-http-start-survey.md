@@ -43,9 +43,8 @@
         "isRequired": "boolean (requerido)",
         "options": [
           {
-            "id": "int (requerido; question_option.id)",
-            "optionNumber": "int > 0 (requerido; question_option.option_number)",
-            "text": "string (requerido; question_option.text)"
+            "selectedOption": "int > 0 (requerido; question_option.option_number)",
+            "label": "string (requerido; question_option.text)"
           }
         ]
       }
@@ -122,12 +121,11 @@ components:
           minItems: 1
           items:
             type: object
-            required: [id, optionNumber, text]
+            required: [selectedOption, label]
             additionalProperties: false
             properties:
-              id: { type: integer, minimum: 1 }
-              optionNumber: { type: integer, minimum: 1 }
-              text: { type: string, minLength: 1 }
+              selectedOption: { type: integer, minimum: 1 }
+              label: { type: string, minLength: 1 }
     AnswerDTO:
       type: object
       required: [questionId, selectedOption]
@@ -139,5 +137,5 @@ components:
 
 ## 5. Notas de alineación
 
-* **Resuelto (Fase 0 — 2026-11-12):** `options` se respalda físicamente en la tabla `question_option (id, question_id, option_number, text, value)` definida en `02` §2.2, exponiendo `{ id, optionNumber, text }` y ocultando `value`.
+* **Resuelto (Fase 0 — 2026-11-12):** `options` se respalda físicamente en la tabla `question_option (id, question_id, option_number, text, value)` definida en `02` §2.2, exponiendo `{ selectedOption, label }` (`option_number` y `text`) y ocultando `value`.
 * La ruta `/api/surveys` es una ruta aprobada, coherente con `docs/code_style.md` (`/api/surveys/{id}/complete`).

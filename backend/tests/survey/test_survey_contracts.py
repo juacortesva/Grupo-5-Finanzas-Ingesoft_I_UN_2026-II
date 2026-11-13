@@ -9,7 +9,7 @@ AUTH_USER_2 = {"Authorization": "Bearer dev-user-2"}
 def test_start_survey_when_unauthenticated_then_returns_401(
     client: TestClient,
 ) -> None:
-    # Act
+    # Arrange & Act
     response = client.post("/api/surveys")
 
     # Assert
@@ -20,7 +20,7 @@ def test_start_survey_when_unauthenticated_then_returns_401(
 def test_start_survey_when_authenticated_then_returns_draft_with_question_options(
     client: TestClient,
 ) -> None:
-    # Act
+    # Arrange & Act
     response = client.post("/api/surveys", headers=AUTH_USER_1)
 
     # Assert
@@ -29,8 +29,21 @@ def test_start_survey_when_authenticated_then_returns_draft_with_question_option
     assert body["status"] == "DRAFT"
     assert len(body["questions"]) == 2
     first_option = body["questions"][0]["options"][0]
-    assert set(first_option.keys()) == {"id", "optionNumber", "text"}
+    assert set(first_option.keys()) == {"selectedOption", "label"}
     assert "weight" not in body["questions"][0]
+
+
+def test_start_survey_when_draft_already_exists_then_returns_same_survey_id(
+    client: TestClient,
+) -> None:
+    # Arrange
+    first = client.post("/api/surveys", headers=AUTH_USER_1).json()
+
+    # Act
+    second = client.post("/api/surveys", headers=AUTH_USER_1).json()
+
+    # Assert (BR-02: idempotencia sobre el único DRAFT activo del cliente)
+    assert second["surveyId"] == first["surveyId"]
 
 
 def test_save_answer_when_other_user_or_nonexistent_then_returns_404(

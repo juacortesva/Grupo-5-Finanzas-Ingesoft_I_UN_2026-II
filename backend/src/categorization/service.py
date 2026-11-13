@@ -56,15 +56,25 @@ class CategorizationService:
             )
         except Exception as err:
             # REQ-01 / BR-06: Log técnico sin respuestas, puntajes ni PII.
-            logger.error(
-                "Evaluation failed during profile categorization",
-                extra={
-                    "error_type": type(err).__name__,
-                    "operation": "evaluate_profile",
-                    "timestamp": datetime.now(UTC).isoformat(),
-                },
+            self.log_error(
+                error_type=type(err).__name__,
+                operation="evaluate_profile",
+                timestamp=datetime.now(UTC),
             )
             return self._save_provisional_profile(user_id, survey_id)
+
+    def log_error(
+        self, error_type: str, operation: str, timestamp: datetime
+    ) -> None:
+        """Registra metadatos técnicos del error sin respuestas, puntajes ni PII."""
+        logger.error(
+            "Error técnico durante evaluación de perfil financiero",
+            extra={
+                "error_type": error_type,
+                "operation": operation,
+                "timestamp": timestamp.isoformat(),
+            },
+        )
 
     def _save_provisional_profile(
         self, user_id: UUID, survey_id: UUID

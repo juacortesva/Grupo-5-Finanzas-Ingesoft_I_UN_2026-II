@@ -1,21 +1,18 @@
+# Secretos
+.env
+*.env.local
+
 # Python
+.venv/
 __pycache__/
 *.py[cod]
-*$py.class
-.venv/
-venv/
-.pytest_cache/
-.ruff_cache/
-.mypy_cache/
 *.egg-info/
-dist/
 build/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
 
-# Environments
-.env
-backend/.env
-frontend/.env
-
-# Node / Frontend
+# Node
 node_modules/
-frontend/dist/
+dist/
+*.tsbuildinfo

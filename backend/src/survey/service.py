@@ -45,6 +45,10 @@ class SurveyManager:
             raise RuntimeError("No fue posible crear el borrador de encuesta")
         return persisted
 
+    def resume_survey(self, user_id: UUID) -> Survey | None:
+        """Recupera el borrador DRAFT activo del cliente si existe (BR-02)."""
+        return self._survey_repo.find_draft_by_user_id(user_id)
+
     def save_answer(
         self, survey_id: UUID, user_id: UUID, payload: SaveAnswerRequest
     ) -> None:

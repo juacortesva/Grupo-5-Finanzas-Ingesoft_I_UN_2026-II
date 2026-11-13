@@ -2,7 +2,7 @@ from datetime import UTC, datetime
 from typing import Protocol
 from uuid import UUID
 
-from sqlalchemy import select, update
+from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
@@ -25,6 +25,15 @@ class SurveyRepository(Protocol):
 
     def save(self, survey: Survey) -> Survey | None:
         """Crea DRAFT o ejecuta transición condicional a COMPLETED (CT-05)."""
+
+    def update_status(
+        self,
+        survey_id: UUID,
+        user_id: UUID,
+        new_status: SurveyStatus,
+        completed_at: datetime | None = None,
+    ) -> Survey | None:
+        """Ejecuta transición condicional DRAFT -> COMPLETED bajo bloqueo FOR UPDATE."""
 
     def save_answer(self, survey_id: UUID, user_id: UUID, answer: Answer) -> bool:
         """Persiste o actualiza una respuesta bajo bloqueo FOR UPDATE (CT-08)."""
@@ -81,7 +90,12 @@ class SqlAlchemySurveyRepository:
         """Crea DRAFT (caso A) o cierra a COMPLETED atómicamente (caso B)."""
         if survey.status == SurveyStatus.DRAFT:
             return self._create_draft(survey)
-        return self._complete_transition(survey)
+        return self.update_status(
+            survey.survey_id,
+            survey.user_id,
+            survey.status,
+            survey.completed_at,
+        )
 
     def _create_draft(self, survey: Survey) -> Survey:
         """Inserta nuevo borrador o devuelve el existente ante carrera BR-02."""
@@ -105,29 +119,34 @@ class SqlAlchemySurveyRepository:
             raise
         return self._to_survey(record, survey.questions)
 
-    def _complete_transition(self, survey: Survey) -> Survey | None:
-        """Transición condicional DRAFT -> COMPLETED (CT-05, caso B)."""
-        now = survey.completed_at or datetime.now(UTC)
+    def update_status(
+        self,
+        survey_id: UUID,
+        user_id: UUID,
+        new_status: SurveyStatus,
+        completed_at: datetime | None = None,
+    ) -> Survey | None:
+        """Transición DRAFT -> COMPLETED con FOR UPDATE (CT-05, BR-03)."""
         stmt = (
-            update(SurveyModel)
+            select(SurveyModel)
             .where(
-                SurveyModel.survey_id == survey.survey_id,
-                SurveyModel.client_id == survey.user_id,
+                SurveyModel.survey_id == survey_id,
+                SurveyModel.client_id == user_id,
                 SurveyModel.status == SurveyStatus.DRAFT.value,
             )
-            .values(
-                status=SurveyStatus.COMPLETED.value,
-                completed_at=now,
-                updated_at=now,
-            )
-            .returning(SurveyModel.survey_id)
+            .with_for_update()
         )
-        updated_id = self._db.execute(stmt).scalar_one_or_none()
-        if updated_id is None:
+        survey_row = self._db.execute(stmt).scalar_one_or_none()
+        if survey_row is None:
             self._db.rollback()
             return None
+
+        now = completed_at or datetime.now(UTC)
+        survey_row.status = new_status.value
+        survey_row.completed_at = now
+        survey_row.updated_at = now
         self._db.commit()
-        return self.find_by_id(survey.survey_id, survey.user_id)
+        return self.find_by_id(survey_id, user_id)
 
     def save_answer(self, survey_id: UUID, user_id: UUID, answer: Answer) -> bool:
         """Bloquea encuesta DRAFT y realiza upsert de respuesta (CT-08)."""

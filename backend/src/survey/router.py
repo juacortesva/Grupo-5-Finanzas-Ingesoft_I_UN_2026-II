@@ -1,16 +1,11 @@
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Response, status
-from sqlalchemy.orm import Session
 
-from src.categorization.engine import ScoringEngine
-from src.categorization.repository import SqlAlchemyProfileRepository
 from src.categorization.schemas import EvaluationResult
-from src.categorization.service import CategorizationService
 from src.core.auth_deps import get_current_user
-from src.core.database import get_db
+from src.core.dependencies import get_survey_manager
 from src.core.schemas import ErrorResponse
-from src.survey.repository import SqlAlchemySurveyRepository
 from src.survey.schemas import (
     AnswerDTO,
     QuestionDTO,
@@ -22,13 +17,6 @@ from src.survey.schemas import (
 from src.survey.service import SurveyManager
 
 router = APIRouter(prefix="/api/surveys", tags=["Surveys"])
-
-
-def _build_survey_manager(db: Session = Depends(get_db)) -> SurveyManager:  # noqa: B008
-    survey_repo = SqlAlchemySurveyRepository(db)
-    profile_repo = SqlAlchemyProfileRepository(db)
-    categorization_service = CategorizationService(ScoringEngine(), profile_repo)
-    return SurveyManager(survey_repo, categorization_service)
 
 
 def _to_draft_response(survey: Survey) -> SurveyDraftResponse:
@@ -44,9 +32,8 @@ def _to_draft_response(survey: Survey) -> SurveyDraftResponse:
                 is_required=q.is_required,
                 options=[
                     QuestionOptionDTO(
-                        id=opt.id,
-                        option_number=opt.option_number,
-                        text=opt.text,
+                        selected_option=opt.option_number,
+                        label=opt.text,
                     )
                     for opt in q.options
                 ],
@@ -71,7 +58,7 @@ def _to_draft_response(survey: Survey) -> SurveyDraftResponse:
 )
 def start_survey(
     user_id: UUID = Depends(get_current_user),  # noqa: B008
-    manager: SurveyManager = Depends(_build_survey_manager),  # noqa: B008
+    manager: SurveyManager = Depends(get_survey_manager),  # noqa: B008
 ) -> SurveyDraftResponse:
     """Inicia o recupera el único borrador DRAFT del cliente (CT-01)."""
     survey = manager.start_survey(user_id)
@@ -91,7 +78,7 @@ def save_answer(
     survey_id: UUID,
     payload: SaveAnswerRequest,
     user_id: UUID = Depends(get_current_user),  # noqa: B008
-    manager: SurveyManager = Depends(_build_survey_manager),  # noqa: B008
+    manager: SurveyManager = Depends(get_survey_manager),  # noqa: B008
 ) -> Response:
     """Registra o actualiza una respuesta en el borrador DRAFT (CT-06)."""
     manager.save_answer(survey_id, user_id, payload)
@@ -113,7 +100,7 @@ def save_answer(
 def complete_survey(
     survey_id: UUID,
     user_id: UUID = Depends(get_current_user),  # noqa: B008
-    manager: SurveyManager = Depends(_build_survey_manager),  # noqa: B008
+    manager: SurveyManager = Depends(get_survey_manager),  # noqa: B008
 ) -> EvaluationResult:
     """Cierra la encuesta DRAFT y evalúa el perfil financiero (CT-09)."""
     return manager.complete_survey(survey_id, user_id)

@@ -18,6 +18,9 @@ class ProfileRepository(Protocol):
     ) -> FinancialProfile:
         """Inserta o actualiza el perfil único vigente del cliente."""
 
+    def find_by_user_id(self, user_id: UUID) -> FinancialProfile | None:
+        """Recupera el perfil financiero vigente del cliente autenticado."""
+
 
 class SqlAlchemyProfileRepository:
     """Implementación SQLAlchemy del repositorio de perfiles financieros."""
@@ -56,6 +59,20 @@ class SqlAlchemyProfileRepository:
 
         self._db.commit()
         self._db.refresh(record)
+        return self._to_domain(record)
+
+    def find_by_user_id(self, user_id: UUID) -> FinancialProfile | None:
+        """Recupera el perfil vigente filtrando por client_id == user_id."""
+        record = self._db.execute(
+            select(FinancialProfileModel).where(
+                FinancialProfileModel.client_id == user_id
+            )
+        ).scalar_one_or_none()
+        if record is None:
+            return None
+        return self._to_domain(record)
+
+    def _to_domain(self, record: FinancialProfileModel) -> FinancialProfile:
         return FinancialProfile(
             profile_id=record.profile_id,
             user_id=record.client_id,

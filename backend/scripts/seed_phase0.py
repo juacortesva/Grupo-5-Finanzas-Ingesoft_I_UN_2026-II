@@ -9,11 +9,14 @@ from src.core.database import SessionLocal
 from src.survey.models import ClientModel, QuestionModel, QuestionOptionModel
 
 
-def seed_database(db: Session) -> None:
+def seed_database(db: Session, *, commit: bool = True) -> None:
     """Siembra clientes dev y catálogo mínimo de preguntas/opciones (idempotente)."""
     _seed_clients(db)
     _seed_questions(db)
-    db.commit()
+    if commit:
+        db.commit()
+    else:
+        db.flush()
 
 
 def _seed_clients(db: Session) -> None:

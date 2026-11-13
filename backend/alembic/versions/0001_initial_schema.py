@@ -8,8 +8,10 @@ Create Date: 2026-11-12
 from collections.abc import Sequence
 
 import sqlalchemy as sa
+from sqlalchemy.orm import Session
 
 from alembic import op
+from scripts.seed_phase0 import seed_database
 
 revision: str = "0001_initial_schema"
 down_revision: str | Sequence[str] | None = None
@@ -136,6 +138,9 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("profile_id"),
         sa.UniqueConstraint("client_id"),
     )
+
+    with Session(bind=op.get_bind()) as session:
+        seed_database(session, commit=False)
 
 
 def downgrade() -> None:

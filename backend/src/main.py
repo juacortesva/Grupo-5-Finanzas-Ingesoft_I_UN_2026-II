@@ -11,6 +11,8 @@ from src.survey.router import router as survey_router
 app = FastAPI(
     title="Asesor Financiero Personal — API",
     version="0.1.0",
+    docs_url="/api/docs",
+    openapi_url="/api/openapi.json",
 )
 
 app.add_middleware(

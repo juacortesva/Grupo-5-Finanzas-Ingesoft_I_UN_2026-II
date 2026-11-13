@@ -1,22 +1,45 @@
+# Despliegue del team-5 (backend + frontend).
+#
+# La base de datos NO corre aquí: es g1-team-5-db, en el servidor PostgreSQL
+# del curso, por instrucción del profesor. La conexión se configura en .env.
+#
+# Uso:   docker compose up -d --build
+# Logs:  docker compose logs -f backend
+
+# Nombre fijo del proyecto: los contenedores se llaman team-5-backend-1 y
+# team-5-frontend-1, sin importar el nombre de la carpeta. Evita choques con
+# los otros equipos de la VM.
+name: team-5
+
 services:
   backend:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-    container_name: finanzas_backend
-    env_file:
-      - ./backend/.env
-    ports:
-      - "8000:8000"
+    build: ./backend
+    env_file: .env
     restart: unless-stopped
+    # Sin "ports": el backend solo es alcanzable desde nginx, dentro de Docker.
 
   frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
-    container_name: finanzas_frontend
-    ports:
-      - "5173:80"
+    build: ./frontend
     depends_on:
       - backend
     restart: unless-stopped
+    ports:
+      # Único puerto publicado en la VM. Se define en .env (FRONTEND_PORT).
+      - "${FRONTEND_PORT:-3005}:80"
+
+  # Base de datos SOLO para desarrollo local y pruebas. Nunca se usa en la VM.
+  # Se levanta con: docker compose --profile local-db up -d db
+  db:
+    image: postgres:16-alpine
+    profiles: ["local-db"]
+    environment:
+      POSTGRES_USER: app
+      POSTGRES_PASSWORD: app
+      POSTGRES_DB: asesor_financiero_local
+    ports:
+      - "127.0.0.1:5433:5432"
+    volumes:
+      - local_db_data:/var/lib/postgresql/data
+
+volumes:
+  local_db_data:

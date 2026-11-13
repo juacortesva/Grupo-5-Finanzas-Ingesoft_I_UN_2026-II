@@ -53,9 +53,8 @@ class Survey(BaseModel):
 class QuestionOptionDTO(CamelCaseSchema):
     """DTO HTTP de opción de respuesta (oculta value, CT-01)."""
 
-    id: int
-    option_number: int
-    text: str
+    selected_option: int
+    label: str
 
 
 class QuestionDTO(CamelCaseSchema):

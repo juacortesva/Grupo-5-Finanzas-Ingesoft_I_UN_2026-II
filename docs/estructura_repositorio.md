@@ -5,15 +5,15 @@
 | **Equipo** | Grupo 5 (`@KevinVerjan`, `@Estebandido-exe`, `@josuarezvi`, `@juacortesva`) |
 | **Ubicación** | `docs/estructura_repositorio.md` |
 | **Patrón de Organización** | Monorepo Políglota con **Backend y Frontend Modulares por Dominio y Capas Internas** |
-| **Referencias** | `docs/adr/adr-0001.md`, `docs/adr/adr-0002.md`, `docs/design/` |
+| **Referencias** | `docs/adr/adr-0001.md`..`adr-0006.md`, `docs/design/`, `docs/contracts/` |
 
 ---
 
 ## 1. Principio de Organización
 
-El repositorio se organiza como un **Monorepo** que agrupa la documentación de ingeniería (`docs/`), el servidor de aplicación (`backend/`) y la aplicación web cliente (`frontend/`).
+El repositorio se organiza como un **Monorepo** que agrupa la documentación de ingeniería (`docs/`), el servidor de aplicación (`backend/`) y la aplicación web cliente (`frontend/`). La base de datos PostgreSQL es externa (**`g1-team-5-db`**, provista por la cátedra) y se conecta mediante `DATABASE_URL` en `.env`, por lo que `docker-compose.yml` y los `Dockerfile` empaquetan únicamente **backend (FastAPI)** y **frontend (React/Vite)** para desarrollo reproducible y despliegue en la **VM del curso (`CentOS Stream 10`, directorio `/opt/projects-g1/team-5`)**.
 
-Tanto en `backend/` como en `frontend/`, el código **no se agrupa en carpetas técnicas globales** (como un único directorio `models/` o `services/` para todo el sistema), sino que se divide primero por **Módulos de Dominio / Features** (por ejemplo, `survey/`, `categorization/`, `...`) y, dentro de cada módulo, se aplican las **capas arquitectónicas** definidas en `ADR-0001` (`docs/adr/adr-0001.md`: `router` $\rightarrow$ `service` $\rightarrow$ `repository` $\rightarrow$ `models`).
+Tanto en `backend/` como en `frontend/`, el código **no se agrupa en carpetas técnicas globales** (como un único directorio `models/` o `services/` para todo el sistema), sino que se divide primero por **Módulos de Dominio / Features** (por ejemplo, `survey/`, `categorization/`, `...`) y, dentro de cada módulo, se aplican las **capas arquitectónicas** definidas en `ADR-0001` (`docs/adr/adr-0001.md`: `router` $\rightarrow$ `service` $\rightarrow$ `repository` $\rightarrow$ `models`) y formalizadas en `ADR-0003`.
 
 ### Justificación
 1. **Alineación con el Diseño Arquitectónico:** Refleja exactamente la división modular del sistema planteada en los diagramas de componentes.
@@ -28,21 +28,26 @@ El siguiente árbol define la jerarquía de carpetas y el patrón de cada módul
 
 ```text
 asesor-financiero/
-├── README.md                        # Descripción general e instrucciones de arranque
-├── docker-compose.yml               # Orquestación local de base de datos y servicios
+├── README.md                        # Descripción general, ejecución local y despliegue en la VM
+├── .env.example                     # Plantilla de variables de entorno (DATABASE_URL hacia g1-team-5-db)
+├── .gitignore                       # Exclusiones de Git (.env, dependencias y artefactos de compilación)
+├── docker-compose.yml               # Orquestación exclusiva de backend y frontend (VM CentOS Stream 10: /opt/projects-g1/team-5)
 │
 ├── docs/                            # Documentación de Ingeniería de Software
 │   ├── code_style.md                # Estándares de código y convenciones
 │   ├── estructura_repositorio.md    # Este documento (arquitectura de carpetas)
 │   ├── project_status.md            # Estado del proyecto y bitácora
-│   ├── adr/                         # Architecture Decision Records (adr-0001.md, adr-0002.md)
+│   ├── adr/                         # Architecture Decision Records (adr-0001.md a adr-0006.md)
 │   ├── req/                         # Especificación de Requerimientos (REQ-01.md)
 │   ├── design/                      # Entregables de Diseño Arquitectónico y de Datos
+│   ├── contracts/                   # Contratos de interfaz por operación (CT-01 a CT-12)
 │   └── rfc/                         # Requests for Comments (propuestas técnicas)
 │
 ├── backend/                         # API REST y Lógica de Negocio (Python + FastAPI)
+│   ├── Dockerfile                   # Imagen del servicio backend (FastAPI)
+│   ├── entrypoint.sh                # Arranque del contenedor: alembic upgrade head + uvicorn
 │   ├── pyproject.toml               # Dependencias y configuración de linters/pruebas
-│   ├── alembic/                     # Migraciones de esquema de PostgreSQL
+│   ├── alembic/                     # Migraciones de esquema sobre g1-team-5-db
 │   │   └── versions/                # (...) Archivos de migración autogenerados
 │   ├── src/
 │   │   ├── main.py                  # Punto de entrada de FastAPI y registro de módulos
@@ -67,10 +72,12 @@ asesor-financiero/
 │   └── tests/                       # Suite de pruebas automatizadas (Pytest)
 │       ├── unit/                    # Pruebas aisladas de dominio y servicios (sin BD)
 │       │   └── ...
-│       └── integration/             # Pruebas de flujo completo (FastAPI + PostgreSQL)
+│       └── integration/             # Pruebas de flujo completo (FastAPI + g1-team-5-db)
 │           └── ...
 │
 └── frontend/                        # Aplicación Web Cliente (React + Vite + TypeScript)
+    ├── Dockerfile                   # Imagen del servicio frontend (compilación con Node + nginx)
+    ├── nginx.conf                   # Sirve el build de React y reenvía /api/ al backend
     ├── package.json                 # Dependencias y scripts de cliente
     ├── tsconfig.json                # Configuración estricta de TypeScript
     └── src/
@@ -148,9 +155,10 @@ from src.<other_module>.service import SomeDomainService
 
 ## 5. Convención Inmutable de Subcarpetas en `docs/`
 
-Para mantener la trazabilidad sin enlaces rotos entre documentos, la carpeta `docs/` mantiene únicamente cuatro subdirectorios de artefactos:
+Para mantener la trazabilidad sin enlaces rotos entre documentos, la carpeta `docs/` mantiene únicamente cinco subdirectorios de artefactos:
 
 1. **`docs/req/`**: Especificaciones de requerimientos y casos de uso (no usar `docs/requirements/`).
 2. **`docs/adr/`**: Registros de decisiones de arquitectura (no usar `docs/decisions/`).
 3. **`docs/design/`**: Documentos de diseño arquitectónico, detallado, de interacción y de datos.
-4. **`docs/rfc/`**: Propuestas y borradores técnicos previos a una decisión formal.
+4. **`docs/contracts/`**: Contratos de interfaz detallados por operación (`CT-01` a `CT-12`).
+5. **`docs/rfc/`**: Propuestas y borradores técnicos previos a una decisión formal.
