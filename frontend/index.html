@@ -1,0 +1,258 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Fase 0 — Arnés de Verificación de Contratos (Walking Skeleton)</title>
+  </head>
+  <body>
+    <h1>Fase 0: Arnés HTML de Verificación de Contratos (Walking Skeleton)</h1>
+    <p>
+      Interfaz HTML plana para verificar de punta a punta la tubería
+      <strong>Frontend -&gt; Backend (FastAPI) -&gt; PostgreSQL (Servidor del Profesor)</strong>
+      y el cumplimiento de los contratos aprobados (CT-01, CT-02, CT-06, CT-09).
+    </p>
+
+    <hr />
+
+    <section>
+      <h2>Configuración de Conexión y Autenticación Provisional (CT-02)</h2>
+      <p>
+        <strong>Contrato CT-02:</strong> <code>getCurrentUser</code> — Header requerido:
+        <code>Authorization: Bearer &lt;token&gt;</code> (en Fase 0 acepta
+        <code>dev-user-1</code>, <code>dev-user-2</code> o un <code>&lt;client_uuid&gt;</code>).
+      </p>
+      <pre>
+Error 401 esperado (CT-02):
+{ "detail": "No autenticado" }
+      </pre>
+      <div>
+        <label for="apiBaseUrl">URL Base Backend:</label>
+        <input id="apiBaseUrl" type="text" value="http://localhost:8000" size="35" />
+      </div>
+      <div>
+        <label for="authToken">Token Bearer:</label>
+        <select id="authTokenPreset">
+          <option value="dev-user-1">dev-user-1 (Cliente A)</option>
+          <option value="dev-user-2">dev-user-2 (Cliente B - pruebas 404 ownership)</option>
+          <option value="token-invalido">token-invalido (provoca 401)</option>
+          <option value="">(Sin header Authorization - provoca 401)</option>
+        </select>
+        <input id="authToken" type="text" value="dev-user-1" size="40" />
+      </div>
+      <div>
+        <button type="button" onclick="checkHealth()">GET /api/health (Probar BD)</button>
+      </div>
+    </section>
+
+    <hr />
+
+    <section>
+      <h2>CT-01 — startSurvey (POST /api/surveys -&gt; 200 OK)</h2>
+      <p><strong>Reglas:</strong> BR-01 (1..10 preguntas activas), BR-02 (único DRAFT por cliente).</p>
+      <pre>
+Contrato CT-01 — Respuesta 200 esperada:
+{
+  "surveyId": "UUID",
+  "status": "DRAFT",
+  "startedAt": "datetime ISO-8601",
+  "questions": [
+    {
+      "questionId": 1,
+      "text": "string",
+      "displayOrder": 1,
+      "isRequired": true,
+      "options": [
+        { "id": 1, "optionNumber": 1, "text": "string" }
+      ]
+    }
+  ],
+  "answers": [
+    { "questionId": 1, "selectedOption": 1 }
+  ]
+}
+      </pre>
+      <button type="button" onclick="startSurvey(false)">POST /api/surveys (Autenticado)</button>
+      <button type="button" onclick="startSurvey(true)">POST /api/surveys (Sin token -&gt; 401)</button>
+    </section>
+
+    <hr />
+
+    <section>
+      <h2>CT-06 — saveAnswer (PUT /api/surveys/{surveyId}/answers -&gt; 204 No Content)</h2>
+      <p><strong>Reglas:</strong> BR-01..BR-03, validación en question_option, 404 si ajena/inexistente, 409 si COMPLETED, 422 si opción inválida.</p>
+      <pre>
+Contrato CT-06 — Payload enviado:
+{ "questionId": 1, "selectedOption": 1 }
+
+Respuestas esperadas:
+- 204 No Content (cuerpo vacío)
+- 401: { "detail": "No autenticado" }
+- 404: { "detail": "Encuesta no encontrada" }
+- 409: { "detail": "La encuesta ya fue completada y no admite modificaciones" }
+- 422 (dominio): { "detail": "Opción inválida para la pregunta seleccionada" }
+- 422 (Pydantic): { "detail": [{ "type": "...", "loc": ["body", "..."], "msg": "..." }] }
+      </pre>
+      <div>
+        <label for="surveyIdInput">surveyId:</label>
+        <input id="surveyIdInput" type="text" placeholder="UUID de la encuesta" size="40" />
+      </div>
+      <div>
+        <label for="questionIdInput">questionId:</label>
+        <input id="questionIdInput" type="number" value="1" />
+        <label for="selectedOptionInput">selectedOption (optionNumber):</label>
+        <input id="selectedOptionInput" type="number" value="1" />
+      </div>
+      <div>
+        <button type="button" onclick="saveAnswer()">PUT /answers (Enviar formulario -&gt; 204)</button>
+        <button type="button" onclick="saveAllSeededAnswers()">Responder todas las obligatorias (Q1 y Q2)</button>
+        <button type="button" onclick="triggerInvalidOption422()">Probar opción inválida (selectedOption=999 -&gt; 422)</button>
+        <button type="button" onclick="triggerNotFound404()">Probar surveyId inexistente (-&gt; 404)</button>
+      </div>
+    </section>
+
+    <hr />
+
+    <section>
+      <h2>CT-09 — completeSurvey (POST /api/surveys/{surveyId}/complete -&gt; 200 OK)</h2>
+      <p><strong>Reglas:</strong> BR-03 (transición DRAFT -&gt; COMPLETED), BR-04, BR-05, BR-06.</p>
+      <pre>
+Contrato CT-09 — Respuesta 200 esperada:
+{
+  "surveyId": "UUID",
+  "assignedCategory": "CONSERVATIVE | MODERATE | AGGRESSIVE | UNDER_EVALUATION",
+  "evaluationStatus": "COMPLETED | ERROR",
+  "totalScore": "string | null"
+}
+Errores esperados: 401, 404, 409 (si ya COMPLETED), 422 (si faltan obligatorias) con { "detail": "..." }.
+      </pre>
+      <button type="button" onclick="completeSurvey()">POST /complete (Cerrar y evaluar encuesta -&gt; 200 / 409 / 422)</button>
+    </section>
+
+    <hr />
+
+    <section>
+      <h2>Resultado en Vivo (Inspección Cruda de Petición y Respuesta)</h2>
+      <h3>Petición Enviada:</h3>
+      <pre id="requestDump">(Ninguna petición ejecutada todavía)</pre>
+      <h3>Código HTTP Recibido:</h3>
+      <pre id="responseStatus">-</pre>
+      <h3>JSON Crudo Devuelto por el Backend:</h3>
+      <pre id="responseBody">-</pre>
+    </section>
+
+    <script>
+      const presetSelect = document.getElementById("authTokenPreset");
+      const authInput = document.getElementById("authToken");
+      presetSelect.addEventListener("change", () => {
+        authInput.value = presetSelect.value;
+      });
+
+      async function sendRequest(method, path, body = null, forceNoAuth = false) {
+        const baseUrl = document.getElementById("apiBaseUrl").value.replace(/\/$/, "");
+        const token = forceNoAuth ? "" : document.getElementById("authToken").value.trim();
+        const headers = {};
+        if (token) {
+          headers["Authorization"] = `Bearer ${token}`;
+        }
+        if (body !== null) {
+          headers["Content-Type"] = "application/json";
+        }
+
+        const url = `${baseUrl}${path}`;
+        document.getElementById("requestDump").textContent = JSON.stringify(
+          { method, url, headers, body },
+          null,
+          2
+        );
+
+        try {
+          const res = await fetch(url, {
+            method,
+            headers,
+            body: body !== null ? JSON.stringify(body) : undefined,
+          });
+          document.getElementById("responseStatus").textContent =
+            `${res.status} ${res.statusText}`;
+          const rawText = await res.text();
+          if (!rawText) {
+            document.getElementById("responseBody").textContent = "(cuerpo vacío)";
+            return { status: res.status, data: null };
+          }
+          try {
+            const parsed = JSON.parse(rawText);
+            document.getElementById("responseBody").textContent = JSON.stringify(
+              parsed,
+              null,
+              2
+            );
+            return { status: res.status, data: parsed };
+          } catch {
+            document.getElementById("responseBody").textContent = rawText;
+            return { status: res.status, data: rawText };
+          }
+        } catch (err) {
+          document.getElementById("responseStatus").textContent = "ERROR DE RED";
+          document.getElementById("responseBody").textContent = String(err);
+          return { status: 0, data: null };
+        }
+      }
+
+      async function checkHealth() {
+        await sendRequest("GET", "/api/health", null, true);
+      }
+
+      async function startSurvey(forceNoAuth) {
+        const result = await sendRequest("POST", "/api/surveys", null, forceNoAuth);
+        if (result.status === 200 && result.data && result.data.surveyId) {
+          document.getElementById("surveyIdInput").value = result.data.surveyId;
+        }
+      }
+
+      async function saveAnswer() {
+        const surveyId = document.getElementById("surveyIdInput").value.trim();
+        const questionId = Number(document.getElementById("questionIdInput").value);
+        const selectedOption = Number(
+          document.getElementById("selectedOptionInput").value
+        );
+        await sendRequest("PUT", `/api/surveys/${surveyId}/answers`, {
+          questionId,
+          selectedOption,
+        });
+      }
+
+      async function saveAllSeededAnswers() {
+        const surveyId = document.getElementById("surveyIdInput").value.trim();
+        await sendRequest("PUT", `/api/surveys/${surveyId}/answers`, {
+          questionId: 1,
+          selectedOption: 2,
+        });
+        await sendRequest("PUT", `/api/surveys/${surveyId}/answers`, {
+          questionId: 2,
+          selectedOption: 2,
+        });
+      }
+
+      async function triggerInvalidOption422() {
+        const surveyId = document.getElementById("surveyIdInput").value.trim();
+        await sendRequest("PUT", `/api/surveys/${surveyId}/answers`, {
+          questionId: 1,
+          selectedOption: 999,
+        });
+      }
+
+      async function triggerNotFound404() {
+        await sendRequest(
+          "PUT",
+          "/api/surveys/00000000-0000-0000-0000-999999999999/answers",
+          { questionId: 1, selectedOption: 1 }
+        );
+      }
+
+      async function completeSurvey() {
+        const surveyId = document.getElementById("surveyIdInput").value.trim();
+        await sendRequest("POST", `/api/surveys/${surveyId}/complete`);
+      }
+    </script>
+  </body>
+</html>
