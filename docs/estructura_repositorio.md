@@ -11,7 +11,7 @@
 
 ## 1. Principio de Organización
 
-El repositorio se organiza como un **Monorepo** que agrupa la documentación de ingeniería (`docs/`), el servidor de aplicación (`backend/`) y la aplicación web cliente (`frontend/`). La base de datos PostgreSQL es externa (**`g1-team-5-db`**, provista por la cátedra) y se conecta mediante `DATABASE_URL` en `.env`, por lo que `docker-compose.yml` y los `Dockerfile` empaquetan únicamente **backend (FastAPI)** y **frontend (React/Vite)** para desarrollo reproducible y despliegue en la **VM del curso (`CentOS Stream 10`, directorio `projects-gl/team-5`)**.
+El repositorio se organiza como un **Monorepo** que agrupa la documentación de ingeniería (`docs/`), el servidor de aplicación (`backend/`) y la aplicación web cliente (`frontend/`). La base de datos PostgreSQL es externa (**`g1-team-5-db`**, provista por la cátedra) y se conecta mediante `DATABASE_URL` en `.env`, por lo que `docker-compose.yml` y los `Dockerfile` empaquetan únicamente **backend (FastAPI)** y **frontend (React/Vite)** para desarrollo reproducible y despliegue en la **VM del curso (`CentOS Stream 10`, directorio `/opt/projects-g1/team-5`)**.
 
 Tanto en `backend/` como en `frontend/`, el código **no se agrupa en carpetas técnicas globales** (como un único directorio `models/` o `services/` para todo el sistema), sino que se divide primero por **Módulos de Dominio / Features** (por ejemplo, `survey/`, `categorization/`, `...`) y, dentro de cada módulo, se aplican las **capas arquitectónicas** definidas en `ADR-0001` (`docs/adr/adr-0001.md`: `router` $\rightarrow$ `service` $\rightarrow$ `repository` $\rightarrow$ `models`) y formalizadas en `ADR-0003`.
 
@@ -28,9 +28,10 @@ El siguiente árbol define la jerarquía de carpetas y el patrón de cada módul
 
 ```text
 asesor-financiero/
-├── README.md                        # Descripción general e instrucciones de arranque
+├── README.md                        # Descripción general, ejecución local y despliegue en la VM
 ├── .env.example                     # Plantilla de variables de entorno (DATABASE_URL hacia g1-team-5-db)
-├── docker-compose.yml               # Orquestación exclusiva de backend y frontend (VM CentOS Stream 10: projects-gl/team-5)
+├── .gitignore                       # Exclusiones de Git (.env, dependencias y artefactos de compilación)
+├── docker-compose.yml               # Orquestación exclusiva de backend y frontend (VM CentOS Stream 10: /opt/projects-g1/team-5)
 │
 ├── docs/                            # Documentación de Ingeniería de Software
 │   ├── code_style.md                # Estándares de código y convenciones
@@ -44,6 +45,7 @@ asesor-financiero/
 │
 ├── backend/                         # API REST y Lógica de Negocio (Python + FastAPI)
 │   ├── Dockerfile                   # Imagen del servicio backend (FastAPI)
+│   ├── entrypoint.sh                # Arranque del contenedor: alembic upgrade head + uvicorn
 │   ├── pyproject.toml               # Dependencias y configuración de linters/pruebas
 │   ├── alembic/                     # Migraciones de esquema sobre g1-team-5-db
 │   │   └── versions/                # (...) Archivos de migración autogenerados
@@ -74,7 +76,8 @@ asesor-financiero/
 │           └── ...
 │
 └── frontend/                        # Aplicación Web Cliente (React + Vite + TypeScript)
-    ├── Dockerfile                   # Imagen del servicio frontend (React + Vite)
+    ├── Dockerfile                   # Imagen del servicio frontend (compilación con Node + nginx)
+    ├── nginx.conf                   # Sirve el build de React y reenvía /api/ al backend
     ├── package.json                 # Dependencias y scripts de cliente
     ├── tsconfig.json                # Configuración estricta de TypeScript
     └── src/
