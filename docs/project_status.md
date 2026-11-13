@@ -50,7 +50,7 @@ Aplicación web interactiva que permite a los usuarios descubrir y registrar su 
 ## 3. Estructura de Directorios (Realidad Actual vs. Arquitectura Objetivo)
 
 ### 3.1 Estado Actual en el Repositorio
-Actualmente el repositorio contiene la documentación de ingeniería aprobada y la **infraestructura de despliegue** (PR #22). Aún no existe el código de aplicación en `backend/` ni en `frontend/`:
+El repositorio contiene la documentación de ingeniería aprobada, la **infraestructura de despliegue** (PR #22) y el **Walking Skeleton + base de encuesta en `frontend/`**. Aún no existe el código fuente de `backend/src/`:
 
 ```text
 Grupo-5-Finanzas-Ingesoft_I_UN_2026-II/
@@ -65,7 +65,43 @@ Grupo-5-Finanzas-Ingesoft_I_UN_2026-II/
 ├── frontend/
 │   ├── Dockerfile                                       # Build con Node + nginx
 │   ├── nginx.conf                                       # Sirve React y reenvía /api/ al backend
-│   └── .dockerignore
+│   ├── .dockerignore
+│   ├── .env.example
+│   ├── .prettierrc
+│   ├── .prettierignore
+│   ├── eslint.config.js
+│   ├── index.html
+│   ├── package.json
+│   ├── package-lock.json
+│   ├── tsconfig.json
+│   ├── tsconfig.app.json
+│   ├── tsconfig.node.json
+│   ├── vite.config.ts
+│   └── src/
+│       ├── App.tsx
+│       ├── main.tsx
+│       ├── index.css
+│       ├── testSetup.ts
+│       ├── vite-env.d.ts
+│       ├── api/
+│       │   ├── generated/.gitkeep
+│       │   ├── healthService.ts
+│       │   ├── healthService.test.ts
+│       │   ├── httpClient.ts
+│       │   └── httpClient.test.ts
+│       ├── features/
+│       │   ├── categorization/
+│       │   │   ├── components/CategorySummaryPanel.tsx
+│       │   │   └── types.ts
+│       │   └── survey/
+│       │       ├── api/ (surveyApi.ts, httpSurveyApi.ts, mockSurveyApi.ts, mockSurveyApi.test.ts)
+│       │       ├── components/ (QuestionCard.tsx, SurveyProgressBar.tsx, SurveyResultCard.tsx)
+│       │       ├── hooks/useSurvey.ts
+│       │       ├── pages/ (SurveyView.tsx, SurveyView.test.tsx)
+│       │       └── types.ts
+│       └── shared/
+│           ├── components/ (ConnectivityBanner.tsx, ErrorAlert.tsx)
+│           └── utils/ (formatters.ts, formatters.test.ts)
 └── docs/
     ├── code_style.md                                    # Estándares Ruff, ESLint, Decimal, Logs
     ├── estructura_repositorio.md                        # Reglas de monorepo y capas
@@ -76,7 +112,8 @@ Grupo-5-Finanzas-Ingesoft_I_UN_2026-II/
     │   ├── adr-0003.md                                  # Partición modular y Data Ownership por client_id
     │   ├── adr-0004.md                                  # Persistencia progresiva, bloqueo pesimista e índice DRAFT
     │   ├── adr-0005.md                                  # Tolerancia síncrona a fallos (UNDER_EVALUATION)
-    │   └── adr-0006.md                                  # Ocultamiento 404, auth server-side y logs sin PII
+    │   ├── adr-0006.md                                  # Ocultamiento 404, auth server-side y logs sin PII
+    │   └── adr-0007.md                                  # Aislamiento de adaptadores API (mock vs HTTP) y fetch nativo
     ├── contracts/
     │   ├── 01-http-start-survey.md                      # CT-01 a CT-12: contratos por operación HTTP/Service/Repo
     │   ├── ...
@@ -243,13 +280,15 @@ $$\text{router} \longrightarrow \text{service} \longrightarrow \begin{cases} \te
 - [x] `ADR-0004`: Persistencia unitaria progresiva, bloqueo pesimista (`SELECT ... FOR UPDATE`) e índice único parcial de borrador.
 - [x] `ADR-0005`: Tolerancia síncrona a fallos de evaluación (`UNDER_EVALUATION`) sin brokers de mensajería.
 - [x] `ADR-0006`: Ocultamiento de existencia (`404` vs. `403`), inyección server-side de `user_id` y logs sin PII.
+- [x] `ADR-0007`: Aislamiento de adaptadores API (`mockSurveyApi` vs `httpSurveyApi`) y cliente `fetch` nativo en frontend.
 - [x] `01_Architectural_and_Detailed_Design.md`, `02_Interaction_and_Data_Design.md`, `code_style.md`, `estructura_repositorio.md` y `docs/contracts/` (`CT-01`..`CT-12`).
 
 ---
 
-### [ ] Fase 0: Walking Skeleton (Pendiente — Prioridad Inmediata)
+### [ ] Fase 0: Walking Skeleton (En Progreso — Infraestructura y Frontend Base Completados)
 *Objetivo: Dejar operativa toda la tubería tecnológica E2E antes de codificar las reglas financieras. Criterio de salida: clonar repo, limpiar la BD externa `g1-team-5-db`, ejecutar migraciones Alembic desde cero, levantar contenedores backend/frontend (`docker-compose.yml`) conectados a `g1-team-5-db` (incluyendo verificación en la VM `CentOS Stream 10`, directorio `/opt/projects-g1/team-5`), ver una petición viajando desde React hasta PostgreSQL y pasar `pytest` en verde.*
 
+- [x] **Bitácora `2026-11-12` (Bloque 4 — Frontend Walking Skeleton y Base de Encuesta):** Inicialización de `frontend/` (React + Vite + TypeScript `strict`), ESLint (`no-explicit-any`, máx. 100 caracteres), Prettier, cliente HTTP (`src/api/httpClient.ts`), banner de conectividad (`/api/health` vs `VITE_USE_MOCK_API`), flujo completo de encuesta sobre contratos `CT-01`, `CT-06` y `CT-09` con adaptador mock aislado (`ADR-0007`) y suite Vitest en verde (5 archivos, 17 pruebas).
 - [x] **1. Saneamiento de BD Externa (`g1-team-5-db`) e Infraestructura Docker:**
   - [x] **Prerrequisito obligatorio antes de Alembic** (realizado el 2026-11-13: `g1-team-5-db` quedó sin tablas): Vaciar/limpiar las tablas residuales y `alembic_version` actualmente alojadas en el servidor PostgreSQL externo del curso (`g1-team-5-db`) provenientes de migraciones revertidas en `main`, para ejecutar Alembic desde cero sin conflictos de esquema.
   - [x] Crear `.env.example` (con `DATABASE_URL` apuntando a `g1-team-5-db`, sin credenciales reales) y `.gitignore` para Python, Node y entornos locales.
@@ -260,9 +299,9 @@ $$\text{router} \longrightarrow \text{service} \longrightarrow \begin{cases} \te
   - [ ] Configurar Alembic (`alembic/`) y generar la migración inicial sobre `g1-team-5-db` limpia con las 5 tablas del modelo ER (`client`, `survey`, `question`, `answer`, `financial_profile`).
   - [ ] Crear estructura base de paquetes en `src/survey/` y `src/categorization/` junto con un endpoint de conectividad E2E en `src/main.py`.
 - [ ] **3. Contrato OpenAPI y Esqueleto de Frontend (`frontend/`):**
-  - [ ] Inicializar aplicación React + Vite + TypeScript en `frontend/`.
-  - [ ] Configurar script `openapi-typescript` en `package.json` para exportar esquemas de FastAPI a `frontend/src/api/generated/`.
-  - [ ] Conectar pantalla base en React consumiendo el backend y ejecutando primera prueba en verde con `pytest`.
+  - [x] Inicializar aplicación React + Vite + TypeScript en `frontend/` con cliente HTTP (`httpClient.ts`), indicador `/api/health` y base de encuesta (`CT-01`, `CT-06`, `CT-09`) con adaptador mock/HTTP y pruebas Vitest en verde.
+  - [x] Configurar script `generate:api` (`openapi-typescript`) en `package.json` para exportar esquemas de FastAPI a `frontend/src/api/generated/`.
+  - [ ] Conectar pantalla base en React consumiendo el backend real (`VITE_USE_MOCK_API=false`) y ejecutar primera prueba E2E en verde con `pytest`.
 
 ---
 
