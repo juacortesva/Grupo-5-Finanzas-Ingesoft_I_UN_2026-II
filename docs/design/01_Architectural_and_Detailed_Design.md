@@ -167,6 +167,11 @@ classDiagram
         + completeSurvey(surveyId : UUID, userId : UUID) EvaluationResult
     }
   
+    class CategorizationService {
+        <<external>>
+        + evaluateProfile(userId : UUID, surveyId : UUID, answers : List~Answer~) EvaluationResult
+    }
+
     class Survey {
         - surveyId : UUID
         - userId : UUID
@@ -210,7 +215,7 @@ classDiagram
     Survey --> SurveyStatus : has
 ```
 
-**Nota de diseño:** El parámetro `userId` en `saveAnswer`, `completeSurvey` y `findById` proviene del contexto de autenticación validado por el backend (dependencia de FastAPI `get_current_user` / `getCurrentUser`) y corresponde a `client_id` en PostgreSQL. `findById` solo devuelve la encuesta si pertenece al `userId` indicado; en caso contrario devuelve `null` (traducido a HTTP 404 para no revelar su existencia). Adicionalmente, por `BR-03`, una encuesta en estado `COMPLETED` no puede volver a `DRAFT` ni aceptar modificaciones de sus respuestas.
+**Nota de diseño:** El parámetro `userId` en `saveAnswer`, `completeSurvey` y `findById` proviene del contexto de autenticación validado por el backend (dependencia de FastAPI `getCurrentUser`) y corresponde a `client_id` en PostgreSQL. `findById` solo devuelve la encuesta si pertenece al `userId` indicado; en caso contrario devuelve `null` (traducido a HTTP 404 para no revelar su existencia). Adicionalmente, por `BR-03`, una encuesta en estado `COMPLETED` no puede volver a `DRAFT` ni aceptar modificaciones de sus respuestas.
 
 ### 3.3 Class Responsibilities
 
@@ -317,7 +322,7 @@ La decisión arquitectónica (Decision A) se encuentra formalmente documentada e
 
 ## 6. Traceability
 
-| Requirement ID                                    | Use Case                                                    | Component(s)                                                                                     | Class(es)                                                                                                                                                                     |
+| Requirement ID                                    | Scenario / Rule / Constraint                                | Component(s)                                                                                     | Class(es)                                                                                                                                                                     |
 | ------------------------------------------------- | ----------------------------------------------------------- | ------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **REQ-01** (Escenario 1; `BR-01`, `BR-03`, `BR-04`) | Categorización exitosa tras completar la encuesta          | `Web App`, `SurveyRouter`, `SurveyManager`, `SurveyRepository`, `CategorizationService`, `ProfileRepository`, `PostgreSQL` | `SurveyManager`, `Survey`, `Question`, `Answer`, `CategorizationService`, `ScoringEngine`, `EvaluationResult`, `FinancialProfile`, `FinancialCategory`, `SurveyRepository`, `ProfileRepository` |
 | **REQ-01** (Escenario 2; `BR-02`, `BR-03`) | Abandono y reanudación de la encuesta (`DRAFT`)          | `Web App`, `SurveyRouter`, `SurveyManager`, `SurveyRepository`, `PostgreSQL`                     | `SurveyManager`, `Survey`, `SurveyStatus`, `SurveyRepository`, `Answer`                                                                                             |
