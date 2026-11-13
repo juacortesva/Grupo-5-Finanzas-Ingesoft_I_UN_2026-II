@@ -17,7 +17,12 @@ RUN mkdir -p src && touch src/__init__.py && pip install . && rm -rf src build
 COPY . .
 
 # El proceso no corre como root dentro del contenedor.
-RUN useradd --create-home appuser && chmod +x entrypoint.sh
+# COPY conserva los permisos del host. En la VM la carpeta del equipo es
+# rw-rw---- (solo el grupo team5), así que appuser no podría leer el código:
+# se da lectura a todos dentro de la imagen (no cambia nada en la VM).
+RUN useradd --create-home appuser \
+    && chmod -R a+rX /app \
+    && chmod a+x entrypoint.sh
 USER appuser
 
 EXPOSE 8000
