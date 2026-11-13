@@ -5,7 +5,7 @@
 | **VM** | `vm-learn-engsw1-2026ii-g1` |
 | **Carpeta** | `/opt/projects-g1/team-5` |
 | **Base de datos** | `g1-team-5-db` en el servidor PostgreSQL del curso (`34.69.97.140:5432`) |
-| **Puerto publicado** | `3005` (pendiente de confirmar con el profesor) |
+| **Puerto publicado** | `3005` (libre en la VM y abierto en el firewall; verificado el 2026-11-12) |
 
 ## 1. Cómo está armado
 
@@ -21,6 +21,23 @@ Navegador ──► VM:3005 ──► contenedor frontend (nginx)
 - **`frontend/nginx.conf`**: sirve React y reenvía `/api/` al backend. Por eso el backend no publica ningún puerto y no hace falta CORS.
 - **`docker-compose.yml`**: levanta los dos contenedores juntos con el nombre de proyecto `team-5`.
 - **`.env`**: contraseña de la base de datos y puerto. **No se sube a GitHub.** Se crea a partir de `.env.example`.
+
+### Lo que la infraestructura espera del código del equipo
+
+Los Dockerfiles construyen el código que el equipo agregue en `backend/` y `frontend/`. Para que funcionen, ese código debe cumplir esto:
+
+**Backend (`backend/`)**
+- `pyproject.toml` con las dependencias del proyecto, incluidas `uvicorn[standard]` y `alembic`, y la configuración de paquetes que permita `pip install .`.
+- La aplicación FastAPI en `src/main.py`, en una variable llamada `app` (el contenedor ejecuta `uvicorn src.main:app`).
+- Las rutas bajo el prefijo `/api` (por ejemplo `/api/surveys`), porque nginx solo reenvía al backend lo que empieza por `/api/`.
+- La conexión a la base de datos leída de la variable de entorno `DATABASE_URL`.
+- Opcional: `alembic.ini` en `backend/`. Si existe, las migraciones se aplican solas al arrancar el contenedor.
+- Recomendado: `FastAPI(docs_url="/api/docs", openapi_url="/api/openapi.json")`, para que la documentación de la API sea accesible a través de nginx.
+
+**Frontend (`frontend/`)**
+- `package.json` y `package-lock.json` (el contenedor usa `npm ci`).
+- Un script `build` que deje el resultado en `dist/` (es el comportamiento por defecto de Vite).
+- Las llamadas al backend con rutas relativas (`fetch("/api/surveys")`), sin escribir `localhost` ni la IP de la VM.
 
 ## 2. Primer despliegue
 
@@ -59,10 +76,10 @@ docker compose ps
 Deben aparecer `team-5-backend-1` y `team-5-frontend-1` con estado `Up`, y el frontend con `0.0.0.0:3005->80/tcp`.
 
 ```bash
-curl http://localhost:3005/api/health
+curl -I http://localhost:3005
 ```
 
-Respuesta esperada: `{"status":"ok","database":"ok"}`. Si dice `"database":"unreachable"`, revisa el `DATABASE_URL` del `.env`.
+Debe responder `HTTP/1.1 200 OK`: nginx está sirviendo el frontend. Si el backend no arranca, la causa aparece en `docker compose logs backend` (por ejemplo, un `DATABASE_URL` incorrecto o una migración que falló).
 
 Para verlo en el navegador desde tu computador, si el puerto no está abierto en el firewall de Google Cloud, usa un túnel SSH desde tu PC:
 
@@ -70,7 +87,7 @@ Para verlo en el navegador desde tu computador, si el puerto no está abierto en
 ssh -L 3005:localhost:3005 <tu-usuario>@<ip-de-la-vm>
 ```
 
-y abre `http://localhost:3005`. La documentación de la API queda en `http://localhost:3005/api/docs`.
+y abre `http://localhost:3005`. Si el backend configura `docs_url="/api/docs"`, la documentación de la API queda en `http://localhost:3005/api/docs`.
 
 ## 4. Actualizar después de cambios en `main`
 
@@ -109,7 +126,7 @@ npm install
 npm run dev                      # abre http://localhost:5173
 ```
 
-El `.env` debe estar en `backend/` o exportado en la terminal. En desarrollo, Vite reenvía `/api` al backend local (ver `vite.config.ts`).
+El `.env` debe estar en `backend/` o exportado en la terminal. En desarrollo, Vite debe reenviar `/api` al backend local con `server.proxy` en `vite.config.ts` (`"/api": "http://localhost:8000"`), que cumple el mismo papel que nginx en la VM.
 
 Opción B, con Docker, igual que en la VM: `docker compose up --build` desde la raíz y abrir `http://localhost:3005`.
 
