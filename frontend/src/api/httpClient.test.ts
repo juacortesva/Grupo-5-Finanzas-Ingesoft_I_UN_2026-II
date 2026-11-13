@@ -47,16 +47,29 @@ describe("httpClient", () => {
     } satisfies Partial<ApiError>);
   });
 
-  it("test_resolve_auth_token_when_in_dev_and_no_token_then_returns_dev_user_1", () => {
+  it("test_resolve_auth_token_when_no_token_in_prod_or_dev_then_returns_dev_user_1", () => {
     // Arrange
-    vi.stubEnv("DEV", true);
+    vi.stubEnv("DEV", false);
     vi.stubEnv("VITE_DEV_AUTH_TOKEN", "");
+    vi.stubEnv("VITE_ENABLE_DEV_AUTH", "true");
 
     // Act
     const token = resolveAuthToken();
 
     // Assert
     expect(token).toBe("dev-user-1");
+  });
+
+  it("test_resolve_auth_token_when_dev_auth_disabled_then_returns_null", () => {
+    // Arrange
+    vi.stubEnv("VITE_DEV_AUTH_TOKEN", "");
+    vi.stubEnv("VITE_ENABLE_DEV_AUTH", "false");
+
+    // Act
+    const token = resolveAuthToken();
+
+    // Assert
+    expect(token).toBeNull();
   });
 
   it("test_resolve_auth_token_when_storage_has_token_then_returns_storage_token", () => {

@@ -90,9 +90,7 @@ def upgrade() -> None:
         sa.Column("survey_id", sa.Uuid(), nullable=False),
         sa.Column("question_id", sa.Integer(), nullable=False),
         sa.Column("selected_option", sa.Integer(), nullable=False),
-        sa.Column(
-            "option_value", sa.Numeric(precision=10, scale=2), nullable=False
-        ),
+        sa.Column("option_value", sa.Numeric(precision=10, scale=2), nullable=False),
         sa.CheckConstraint(
             "selected_option > 0", name="ck_answer_selected_option_positive"
         ),
@@ -115,9 +113,7 @@ def upgrade() -> None:
         sa.Column("survey_id", sa.Uuid(), nullable=False),
         sa.Column("assigned_category", sa.String(length=32), nullable=False),
         sa.Column("evaluation_status", sa.String(length=16), nullable=False),
-        sa.Column(
-            "total_score", sa.Numeric(precision=10, scale=2), nullable=True
-        ),
+        sa.Column("total_score", sa.Numeric(precision=10, scale=2), nullable=True),
         sa.Column("assigned_at", sa.DateTime(timezone=True), nullable=False),
         sa.CheckConstraint(
             "(evaluation_status = 'ERROR' "

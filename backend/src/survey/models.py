@@ -20,22 +20,6 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from src.core.database import Base
 
 
-class ClientModel(Base):
-    """Modelo SQLAlchemy de la tabla client."""
-
-    __tablename__ = "client"
-
-    client_id: Mapped[UUID] = mapped_column(
-        Uuid(as_uuid=True), primary_key=True, default=uuid4
-    )
-    email: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        nullable=False,
-        default=lambda: datetime.now(UTC),
-    )
-
-
 class SurveyModel(Base):
     """Modelo SQLAlchemy de la tabla survey (BR-02, BR-03)."""
 
@@ -112,9 +96,7 @@ class QuestionOptionModel(Base):
             "option_number",
             name="uq_question_option_question_number",
         ),
-        CheckConstraint(
-            "option_number > 0", name="ck_question_option_number_positive"
-        ),
+        CheckConstraint("option_number > 0", name="ck_question_option_number_positive"),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
@@ -137,9 +119,7 @@ class AnswerModel(Base):
 
     __tablename__ = "answer"
     __table_args__ = (
-        UniqueConstraint(
-            "survey_id", "question_id", name="uq_answer_survey_question"
-        ),
+        UniqueConstraint("survey_id", "question_id", name="uq_answer_survey_question"),
         CheckConstraint(
             "selected_option > 0", name="ck_answer_selected_option_positive"
         ),

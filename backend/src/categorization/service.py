@@ -2,14 +2,21 @@ import logging
 from datetime import UTC, datetime
 from uuid import UUID
 
+from fastapi import Depends
+from sqlalchemy.orm import Session
+
 from src.categorization.engine import ScoringEngine
 from src.categorization.enums import EvaluationStatus, FinancialCategory
-from src.categorization.repository import ProfileRepository
+from src.categorization.repository import (
+    ProfileRepository,
+    SqlAlchemyProfileRepository,
+)
 from src.categorization.schemas import (
     EvaluationResult,
     ProfileEvaluation,
     ScoredAnswerDTO,
 )
+from src.core.database import get_db
 from src.core.exceptions import EvaluationPersistenceError, InvalidInputError
 
 logger = logging.getLogger(__name__)
@@ -63,9 +70,7 @@ class CategorizationService:
             )
             return self._save_provisional_profile(user_id, survey_id)
 
-    def log_error(
-        self, error_type: str, operation: str, timestamp: datetime
-    ) -> None:
+    def log_error(self, error_type: str, operation: str, timestamp: datetime) -> None:
         """Registra metadatos técnicos del error sin respuestas, puntajes ni PII."""
         logger.error(
             "Error técnico durante evaluación de perfil financiero",
@@ -101,3 +106,13 @@ class CategorizationService:
             evaluation_status=EvaluationStatus.ERROR,
             total_score=None,
         )
+
+
+def get_categorization_service(
+    db: Session = Depends(get_db),  # noqa: B008
+) -> CategorizationService:
+    """Construye CategorizationService inyectando motor y repositorio propios."""
+    return CategorizationService(
+        scoring_engine=ScoringEngine(),
+        profile_repo=SqlAlchemyProfileRepository(db),
+    )

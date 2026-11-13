@@ -1,14 +1,13 @@
 from uuid import UUID
 
 from fastapi import Depends, Header
-from sqlalchemy import Uuid, column, select, table
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from src.core.config import settings
 from src.core.database import get_db
 from src.core.exceptions import UnauthorizedError
-
-_CLIENT_TABLE = table("client", column("client_id", Uuid(as_uuid=True)))
+from src.core.models import ClientModel
 
 
 def _resolve_dev_token(token: str) -> UUID | None:
@@ -57,9 +56,7 @@ def get_current_user(
     """Dependencia CT-02: obtiene y valida el user_id del cliente autenticado."""
     user_id = _extract_user_id(authorization=authorization, x_user_id=x_user_id)
     row = db.execute(
-        select(_CLIENT_TABLE.c.client_id).where(
-            _CLIENT_TABLE.c.client_id == user_id
-        )
+        select(ClientModel.client_id).where(ClientModel.client_id == user_id)
     ).first()
     if row is None:
         raise UnauthorizedError("No autenticado")

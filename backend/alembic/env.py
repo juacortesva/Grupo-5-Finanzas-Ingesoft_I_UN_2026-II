@@ -4,6 +4,7 @@ from sqlalchemy import engine_from_config, pool
 
 from alembic import context
 from src.categorization import models as _categorization_models  # noqa: F401
+from src.core import models as _core_models  # noqa: F401
 from src.core.config import settings
 from src.core.database import Base
 from src.survey import models as _survey_models  # noqa: F401

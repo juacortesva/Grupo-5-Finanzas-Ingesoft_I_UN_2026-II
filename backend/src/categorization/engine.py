@@ -6,10 +6,16 @@ from src.core.exceptions import InvalidInputError
 
 
 class ScoringEngine:
-    """Motor matemático puro en memoria usando aritmética Decimal (CT-11)."""
+    """Motor matemático puro en memoria usando aritmética Decimal (CT-11).
+
+    Nota de Fase 0: Los umbrales por defecto (50.00 y 80.00) son valores
+    ficticios/provisionales de calibración para el Walking Skeleton, pendientes
+    de validación definitiva por parte de producto/finanzas.
+    """
 
     def __init__(
         self,
+        # Umbrales provisionales de Fase 0 (pendientes de definición financiera)
         conservative_threshold: Decimal = Decimal("50.00"),
         moderate_threshold: Decimal = Decimal("80.00"),
     ) -> None:

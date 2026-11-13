@@ -2,11 +2,18 @@ from datetime import UTC, datetime
 from decimal import Decimal
 from uuid import UUID, uuid4
 
+from fastapi import Depends
+from sqlalchemy.orm import Session
+
 from src.categorization.schemas import EvaluationResult, ScoredAnswerDTO
-from src.categorization.service import CategorizationService
+from src.categorization.service import (
+    CategorizationService,
+    get_categorization_service,
+)
+from src.core.database import get_db
 from src.core.exceptions import InvalidStateError, NotFoundError, ValidationError
 from src.survey.enums import SurveyStatus
-from src.survey.repository import SurveyRepository
+from src.survey.repository import SqlAlchemySurveyRepository, SurveyRepository
 from src.survey.schemas import Answer, Question, SaveAnswerRequest, Survey
 
 
@@ -102,9 +109,7 @@ class SurveyManager:
     def _resolve_option_value(
         self, questions: list[Question], question_id: int, selected_option: int
     ) -> Decimal:
-        question = next(
-            (q for q in questions if q.question_id == question_id), None
-        )
+        question = next((q for q in questions if q.question_id == question_id), None)
         if question is None:
             raise ValidationError("Pregunta inexistente o inactiva")
 
@@ -136,3 +141,16 @@ class SurveyManager:
             for ans in survey.answers
             if ans.question_id in weights
         ]
+
+
+def get_survey_manager(
+    db: Session = Depends(get_db),  # noqa: B008
+    categorization_service: CategorizationService = Depends(  # noqa: B008
+        get_categorization_service
+    ),
+) -> SurveyManager:
+    """Construye SurveyManager ensamblando SqlAlchemySurveyRepository."""
+    return SurveyManager(
+        survey_repo=SqlAlchemySurveyRepository(db),
+        categorization_service=categorization_service,
+    )

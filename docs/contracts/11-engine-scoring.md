@@ -60,7 +60,7 @@ Este archivo documenta **dos operaciones independientes** del motor de dominio e
 | `Decimal("80.00")` | `MODERATE` | Empate en umbral → menor riesgo (`BR-05`) |
 | `Decimal("80.01")` | `AGGRESSIVE` | Banda superior |
 
-*Los valores de los umbrales son solo de ejemplo: los reales los definirá producto/finanzas (`REQ-01`, Dependencias).*
+*Nota de Fase 0 (Walking Skeleton): Los umbrales `conservative_threshold = Decimal("50.00")` y `moderate_threshold = Decimal("80.00")` en `ScoringEngine`, así como las preguntas y opciones de `backend/scripts/seed_phase0.py` (calibradas para que responder opciones intermedias produzca `65.00` $\rightarrow$ `MODERATE`), son **datos ficticios/provisionales de calibración** mientras producto/finanzas define la matriz definitiva (`REQ-01`, Dependencias).*
 
 ## 4. Notas de alineación con `01`
 

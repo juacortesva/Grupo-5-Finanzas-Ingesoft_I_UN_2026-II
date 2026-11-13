@@ -31,11 +31,11 @@
 Dado que aún no existe un servicio emisor de tokens (login/JWT), en Fase 0 (`ENVIRONMENT=development`) la dependencia `get_current_user` implementa el siguiente mecanismo explícito, compartido por backend y frontend:
 
 1. **Cabecera principal (`Authorization: Bearer <token>`):**
-   - `dev-user-1` $\rightarrow$ resuelve a `UUID("00000000-0000-0000-0000-000000000001")` (Cliente A sembrado en BD).
+   - `dev-user-1` $\rightarrow$ resuelve a `UUID("00000000-0000-0000-0000-000000000001")` (Cliente A sembrado en BD). En el frontend (`frontend/src/api/httpClient.ts`), `resolveAuthToken()` utiliza `"dev-user-1"` como fallback provisional de Fase 0 cuando no hay token configurado ni en `localStorage` (desactivable con `VITE_ENABLE_DEV_AUTH=false`), permitiendo que el build de producción en la VM se autentique contra FastAPI.
    - `dev-user-2` $\rightarrow$ resuelve a `UUID("00000000-0000-0000-0000-000000000002")` (Cliente B sembrado en BD, utilizado para pruebas de violación de ownership $\rightarrow$ `404`).
    - `<client_uuid>` $\rightarrow$ si el token tiene formato UUID válido, se toma como `client_id`.
 2. **Cabecera de respaldo opcional:** solo si `ALLOW_DEV_USER_HEADER=true` y no se envía `Authorization`, se acepta `X-User-Id: <client_uuid>`.
-3. **Verificación obligatoria en BD:** en todos los casos, `get_current_user` verifica que el `client_id` resuelto exista en la tabla `client`. Si la cabecera falta, el formato es inválido o la fila no existe, lanza `UnauthorizedError` $\rightarrow$ HTTP `401` con `{ "detail": "No autenticado" }`.
+3. **Verificación obligatoria en BD (`src/core/models.py`):** en todos los casos, `get_current_user` verifica que el `client_id` resuelto exista en la tabla `client` (`ClientModel` en `backend/src/core/models.py`). Si la cabecera falta, el formato es inválido o la fila no existe, lanza `UnauthorizedError` $\rightarrow$ HTTP `401` con `{ "detail": "No autenticado" }`.
 
 ## 4. Estructura esencial (`.json`)
 

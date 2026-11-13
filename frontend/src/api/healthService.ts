@@ -18,7 +18,7 @@ interface HealthResponse {
 }
 
 export function isMockApiEnabled(): boolean {
-  return import.meta.env.VITE_USE_MOCK_API !== "false";
+  return import.meta.env.VITE_USE_MOCK_API === "true";
 }
 
 /** Verifica la conectividad del Walking Skeleton contra /api/health o el modo mock. */

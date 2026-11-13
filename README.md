@@ -76,7 +76,11 @@ Construye y levanta:
 docker compose up -d --build
 ```
 
-La primera vez tarda unos minutos porque descarga las imágenes base y compila todo.
+La primera vez tarda unos minutos porque descarga las imágenes base y compila todo. Una vez arriba el contenedor `backend`, carga o actualiza la semilla provisional de Fase 0 (clientes de prueba y catálogo inicial de preguntas calibradas):
+
+```bash
+docker compose exec backend python scripts/seed_phase0.py
+```
 
 ## 3. Verificar
 
@@ -106,12 +110,14 @@ y abre `http://localhost:3005`. Si el backend configura `docs_url="/api/docs"`, 
 cd /opt/projects-g1/team-5
 git pull
 docker compose up -d --build
+docker compose exec backend python scripts/seed_phase0.py
 ```
 
 ## 5. Comandos útiles
 
 | Para | Comando |
 |---|---|
+| Cargar/actualizar semilla inicial (Fase 0) | `docker compose exec backend python scripts/seed_phase0.py` |
 | Ver logs del backend | `docker compose logs -f backend` (salir con `Ctrl+C`) |
 | Ver logs del frontend | `docker compose logs -f frontend` |
 | Reiniciar | `docker compose restart` |
@@ -129,6 +135,8 @@ cd backend
 python -m venv .venv
 source .venv/bin/activate        # en Windows: .venv\Scripts\activate
 pip install -e ".[dev]"
+alembic upgrade head
+python scripts/seed_phase0.py
 uvicorn src.main:app --reload
 
 # Terminal 2: frontend
@@ -139,7 +147,7 @@ npm run dev                      # abre http://localhost:5173
 
 El `.env` debe estar en `backend/` o exportado en la terminal. En desarrollo, Vite debe reenviar `/api` al backend local con `server.proxy` en `vite.config.ts` (`"/api": "http://localhost:8000"`), que cumple el mismo papel que nginx en la VM.
 
-Opción B, con Docker, igual que en la VM: `docker compose up --build` desde la raíz y abrir `http://localhost:3005`.
+Opción B, con Docker, igual que en la VM: `docker compose up --build` desde la raíz, ejecutar `docker compose exec backend python scripts/seed_phase0.py` y abrir `http://localhost:3005`.
 
 Para no tocar la base de datos compartida mientras desarrollas o corres pruebas, levanta la base local:
 

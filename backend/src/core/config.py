@@ -2,11 +2,9 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    """Configuración transversal de la aplicación cargada desde variables de entorno."""
+    """Configuración transversal cargada desde variables de entorno."""
 
-    database_url: str = (
-        "postgresql+psycopg://postgres:CHANGE_ME@g1-team-5-db:5432/finanzas_db"
-    )
+    database_url: str
     environment: str = "development"
     dev_user_1_id: str = "00000000-0000-0000-0000-000000000001"
     dev_user_2_id: str = "00000000-0000-0000-0000-000000000002"

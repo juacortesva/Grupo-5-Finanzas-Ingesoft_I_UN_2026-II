@@ -31,6 +31,25 @@ describe("mockSurveyApi", () => {
     ).rejects.toMatchObject({ status: 409 });
   });
 
+  it("test_complete_survey_when_intermediate_options_then_returns_moderate", async () => {
+    // Arrange
+    const draft = await mockSurveyApi.startSurvey();
+    for (const question of draft.questions) {
+      await mockSurveyApi.saveAnswer(draft.surveyId, {
+        questionId: question.questionId,
+        selectedOption: 2,
+      });
+    }
+
+    // Act
+    const result = await mockSurveyApi.completeSurvey(draft.surveyId);
+
+    // Assert
+    expect(result.evaluationStatus).toBe(EvaluationStatus.COMPLETED);
+    expect(result.assignedCategory).toBe(FinancialCategory.MODERATE);
+    expect(result.totalScore).toBe("65.00");
+  });
+
   it("test_complete_survey_when_eval_fails_then_returns_under_evaluation", async () => {
     // Arrange
     resetMockSurveyState({ simulateEvaluationError: true });

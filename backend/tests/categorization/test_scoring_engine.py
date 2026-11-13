@@ -8,7 +8,7 @@ from src.categorization.schemas import ScoredAnswerDTO
 from src.core.exceptions import InvalidInputError
 
 
-def test_determine_category_when_score_is_on_exact_threshold_then_assigns_lower_risk() -> None:  # noqa: E501
+def test_determine_category_when_on_threshold_then_assigns_lower_risk() -> None:
     # Arrange (BR-05: umbral exacto 50.00 entre CONSERVATIVE y MODERATE)
     engine = ScoringEngine(
         conservative_threshold=Decimal("50.00"),

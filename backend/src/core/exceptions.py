@@ -52,9 +52,7 @@ def register_exception_handlers(app: FastAPI) -> None:
     """Registra traductores globales de excepciones de dominio a JSON estándar."""
 
     @app.exception_handler(DomainError)
-    async def domain_error_handler(
-        _request: Request, exc: DomainError
-    ) -> JSONResponse:
+    async def domain_error_handler(_request: Request, exc: DomainError) -> JSONResponse:
         return JSONResponse(
             status_code=exc.status_code,
             content={"detail": exc.message},

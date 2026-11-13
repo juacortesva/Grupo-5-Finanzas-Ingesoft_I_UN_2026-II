@@ -51,12 +51,12 @@ Aplicación web interactiva que permite a los usuarios descubrir y registrar su 
 ## 3. Estructura de Directorios (Realidad Actual vs. Arquitectura Objetivo)
 
 ### 3.1 Estado Actual en el Repositorio
-El repositorio contiene la documentación de ingeniería aprobada, la **infraestructura de despliegue** (PR #22), el **Walking Skeleton + base de encuesta en `frontend/`** (PR #26) y el **Walking Skeleton completo en `backend/`** con migraciones Alembic, semilla inicial y pruebas `pytest` en verde:
+El repositorio contiene la documentación de ingeniería aprobada, la **infraestructura de despliegue** (PR #22), el **Walking Skeleton + base de encuesta en `frontend/`** (PR #26) y el **Walking Skeleton completo en `backend/`** con migraciones Alembic, semilla provisional de Fase 0 y suites `pytest` + `Vitest` en verde:
 
 ```text
 Grupo-5-Finanzas-Ingesoft_I_UN_2026-II/
-├── README.md                                            # Ejecución local y despliegue en la VM
-├── .env.example                                         # Plantilla de DATABASE_URL y FRONTEND_PORT (sin credenciales)
+├── README.md                                            # Ejecución local, semilla Fase 0 y despliegue en la VM
+├── .env.example                                         # Plantilla de DATABASE_URL, FRONTEND_PORT y VITE_USE_MOCK_API=false
 ├── .gitignore
 ├── docker-compose.yml                                   # Proyecto team-5: servicios backend y frontend
 ├── backend/
@@ -66,25 +66,25 @@ Grupo-5-Finanzas-Ingesoft_I_UN_2026-II/
 │   ├── pyproject.toml                                   # Dependencias y configuración de Ruff, Mypy y Pytest
 │   ├── alembic.ini
 │   ├── alembic/
-│   │   ├── env.py
+│   │   ├── env.py                                       # Importa src.core.models, src.survey.models y src.categorization.models
 │   │   ├── script.py.mako
 │   │   └── versions/0001_initial_schema.py              # Esquema de 6 tablas + semilla inicial de Fase 0
 │   ├── scripts/
-│   │   └── seed_phase0.py                               # Semilla idempotente de clientes dev y catálogo
+│   │   └── seed_phase0.py                               # Semilla idempotente con catálogo provisional calibrado (Fase 0)
 │   ├── src/
 │   │   ├── main.py                                      # App FastAPI (/api/health, /api/docs, /api/surveys)
-│   │   ├── core/ (config.py, database.py, dependencies.py, auth_deps.py, exceptions.py, schemas.py)
-│   │   ├── survey/ (router.py, service.py, repository.py, models.py, schemas.py, enums.py)
-│   │   └── categorization/ (service.py, engine.py, repository.py, models.py, schemas.py, enums.py)
+│   │   ├── core/ (config.py, database.py, models.py, auth_deps.py, exceptions.py, schemas.py)
+│   │   ├── survey/ (router.py, service.py [incl. get_survey_manager], repository.py, models.py, schemas.py, enums.py)
+│   │   └── categorization/ (service.py [incl. get_categorization_service], engine.py, repository.py, models.py, schemas.py, enums.py)
 │   └── tests/
-│       ├── conftest.py
+│       ├── conftest.py                                  # Soporta PostgreSQL real (TEST_DATABASE_URL) y fallback SQLite
 │       ├── survey/test_survey_contracts.py
 │       └── categorization/ (test_scoring_engine.py, test_categorization_service.py)
 ├── frontend/
 │   ├── Dockerfile                                       # Build con Node + nginx
 │   ├── nginx.conf                                       # Sirve React y reenvía /api/ al backend
 │   ├── .dockerignore
-│   ├── .env.example
+│   ├── .env.example                                     # VITE_USE_MOCK_API=false por defecto
 │   ├── .prettierrc
 │   ├── .prettierignore
 │   ├── eslint.config.js
@@ -145,25 +145,20 @@ Grupo-5-Finanzas-Ingesoft_I_UN_2026-II/
         └── rfc_proyecto.md                              # Propuesta conceptual inicial
 ```
 
-### 3.2 Árbol Objetivo Completo del Monorepo (Integrando `docs/` Existente + Código por Construir)
-Esta es la estructura completa hacia la cual evolucionará el repositorio durante las Fases 0 a 3, conservando intacta la carpeta `docs/`:
+### 3.2 Árbol Objetivo Completo del Monorepo (Integrando `docs/` Existente + Evolución de Dominio)
+Esta es la estructura completa del repositorio para las Fases 0 a 3, conservando intacta la carpeta `docs/`:
 
 ```text
 Grupo-5-Finanzas-Ingesoft_I_UN_2026-II/
-├── README.md                                            # Descripción general e instrucciones de arranque
+├── README.md                                            # Descripción general, semilla y despliegue en la VM
 ├── .env.example                                         # Plantilla con DATABASE_URL hacia g1-team-5-db (sin credenciales reales)
 ├── docker-compose.yml                                   # Orquestación exclusiva de backend y frontend (dev y VM CentOS Stream 10: /opt/projects-g1/team-5)
-├── docs/                                                # Documentación de Ingeniería (YA EXISTENTE)
+├── docs/                                                # Documentación de Ingeniería
 │   ├── code_style.md                                    # Estándares Ruff, ESLint, Decimal, Logs
 │   ├── estructura_repositorio.md                        # Reglas de monorepo y capas
 │   ├── project_status.md                                # Estado actualizado del proyecto
 │   ├── adr/
-│   │   ├── adr-0001.md
-│   │   ├── adr-0002.md
-│   │   ├── adr-0003.md
-│   │   ├── adr-0004.md
-│   │   ├── adr-0005.md
-│   │   └── adr-0006.md
+│   │   ├── adr-0001.md .. adr-0007.md
 │   ├── contracts/                                       # Contratos por operación (CT-01 a CT-12)
 │   │   └── 01-http-start-survey.md .. 12-repo-save-category.md
 │   ├── design/
@@ -173,53 +168,55 @@ Grupo-5-Finanzas-Ingesoft_I_UN_2026-II/
 │   │   └── REQ-01.md
 │   └── rfc/
 │       └── rfc_proyecto.md
-├── backend/                                             # API REST y Lógica de Negocio (POR CONSTRUIR)
+├── backend/                                             # API REST y Lógica de Negocio
 │   ├── Dockerfile                                       # Imagen reproducible del backend FastAPI
 │   ├── entrypoint.sh                                    # Arranque: migraciones Alembic + uvicorn
 │   ├── pyproject.toml                                   # Configuración de dependencias, Ruff, Mypy y Pytest
 │   ├── alembic/                                         # Migraciones de esquema sobre PostgreSQL externo (g1-team-5-db)
+│   │   ├── env.py
 │   │   └── versions/
+│   ├── scripts/
+│   │   └── seed_phase0.py                               # Semilla idempotente con catálogo provisional de Fase 0
 │   ├── src/
 │   │   ├── main.py                                      # Punto de entrada de FastAPI y registro de routers
-│   │   ├── core/                                        # database.py (SQLAlchemy), config.py, auth_deps.py (user_id), schemas.py
+│   │   ├── core/                                        # config.py, database.py, models.py (ClientModel), auth_deps.py, exceptions.py, schemas.py
 │   │   ├── survey/                                      # Módulo Survey (REQ-01)
 │   │   │   ├── router.py                                # SurveyRouter (endpoints HTTP)
-│   │   │   ├── service.py                               # SurveyManager (ciclo DRAFT/COMPLETED)
+│   │   │   ├── service.py                               # SurveyManager + get_survey_manager
 │   │   │   ├── repository.py                            # SurveyRepository (contrato + implementación SQLAlchemy)
-│   │   │   ├── models.py                                # Tablas survey, question, answer
+│   │   │   ├── models.py                                # Tablas survey, question, question_option, answer
 │   │   │   ├── schemas.py                               # DTOs Pydantic de entrada/salida (CamelCaseSchema)
 │   │   │   └── enums.py                                 # SurveyStatus (DRAFT, COMPLETED)
 │   │   └── categorization/                              # Módulo Categorization (REQ-01)
-│   │       ├── router.py                                # CategorizationRouter
-│   │       ├── service.py                               # CategorizationService (orquestación y fallback Escenario 3)
+│   │       ├── service.py                               # CategorizationService + get_categorization_service
 │   │       ├── engine.py                                # ScoringEngine (umbrales Decimal y BR-05 aislados)
 │   │       ├── repository.py                            # ProfileRepository (contrato + implementación SQLAlchemy)
 │   │       ├── models.py                                # Tabla financial_profile
 │   │       ├── schemas.py                               # EvaluationResult, ScoredAnswerDTO, ProfileEvaluation
 │   │       └── enums.py                                 # FinancialCategory (...), EvaluationStatus (COMPLETED, ERROR)
 │   └── tests/
-│       ├── unit/                                        # Ej: test_scoring_engine.py (probar BR-05 sin BD)
-│       └── integration/                                 # Ej: test_evaluate_profile.py contra g1-team-5-db (Escenarios 1, 2 y 3)
-└── frontend/                                            # Aplicación Web Cliente React + Vite + TS (POR CONSTRUIR)
+│       ├── conftest.py                                  # Fixtures PostgreSQL real (TEST_DATABASE_URL) / fallback SQLite
+│       ├── survey/                                      # Pruebas de contratos, bloqueo FOR UPDATE e índice parcial DRAFT
+│       └── categorization/                              # Pruebas de ScoringEngine (BR-05) y CategorizationService (BR-06)
+└── frontend/                                            # Aplicación Web Cliente React + Vite + TS
     ├── Dockerfile                                       # Imagen reproducible del frontend React + Vite
     ├── nginx.conf                                       # Sirve el build y reenvía /api/ al backend
     ├── package.json                                     # Dependencias y scripts (openapi-typescript, vitest)
     ├── tsconfig.json                                    # Configuración estricta de TypeScript
     └── src/
-        ├── api/                                         # Cliente HTTP y tipos autogenerados (openapi-typescript)
+        ├── api/                                         # Cliente HTTP (httpClient.ts), healthService.ts y tipos OpenAPI
         │   └── generated/
         ├── features/
-        │   ├── survey/                                  # Componentes y hooks del cuestionario (DRAFT/COMPLETED)
+        │   ├── survey/                                  # Adaptadores API, componentes, hooks y páginas del cuestionario
+        │   │   ├── api/
         │   │   ├── components/
         │   │   ├── hooks/
         │   │   ├── pages/
         │   │   └── types.ts
-        │   └── categorization/                          # Pantalla de confirmación y resumen del plan
+        │   └── categorization/                          # Panel de resumen por categoría financiera
         │       ├── components/
-        │       ├── hooks/
-        │       ├── pages/
         │       └── types.ts
-        └── shared/                                      # Componentes UI reutilizables (botones, alertas, spinners)
+        └── shared/                                      # Componentes UI reutilizables y utilidades puras
             ├── components/
             └── utils/
 ```
@@ -231,7 +228,7 @@ Grupo-5-Finanzas-Ingesoft_I_UN_2026-II/
 ### 4.1 Convenciones de Nombres (Naming Case)
 - **Idioma:** Todo el código fuente (clases, métodos, variables, tablas, columnas) se escribe en **inglés**. Textos de UI, mensajes de error al usuario, docstrings y comentarios explicativos van en **español**.
 - **Python (Backend):** `snake_case` para funciones, métodos, variables y módulos (`evaluate_profile`, `user_id`, `engine.py`). `PascalCase` para clases, modelos y schemas (`SurveyManager`, `ScoringEngine`, `EvaluationResult`). `UPPER_SNAKE_CASE` para constantes y enums (`UNDER_EVALUATION`).
-- **TypeScript / React (Frontend):** `camelCase` para variables, funciones y hooks (`evaluateProfile`, `userId`, `useSurvey.ts`). `PascalCase` para componentes UI (`SurveyForm.tsx`), interfaces y tipos.
+- **TypeScript / React (Frontend):** `camelCase` para variables, funciones y hooks (`evaluateProfile`, `userId`, `useSurvey.ts`). `PascalCase` para componentes UI (`SurveyView.tsx`), interfaces y tipos.
 - **PostgreSQL:** Tablas y columnas en `snake_case` (`financial_profile`, `client_id`, `total_score`), valores de estado en `UPPER_SNAKE_CASE` (`'DRAFT'`, `'COMPLETED'`).
 - **Frontera JSON (API REST):** Los payloads JSON utilizan `camelCase` (`surveyId`, `totalScore`), convertidos automáticamente en FastAPI heredando de `CamelCaseSchema` (`alias_generator=to_camel`, `populate_by_name=True`, `from_attributes=True`).
 
@@ -252,7 +249,7 @@ Grupo-5-Finanzas-Ingesoft_I_UN_2026-II/
 ### 4.4 Ley de Dirección de Capas
 $$\text{router} \longrightarrow \text{service} \longrightarrow \begin{cases} \text{engine} \\ \text{repository} \longrightarrow \text{models} \end{cases}$$
 - `router.py` solo maneja HTTP, extrae `user_id` autenticado y traduce excepciones de dominio a códigos HTTP. Prohibido incluir consultas ORM o lógica.
-- `service.py` orquesta casos de uso y maneja tolerancia a fallos. Prohibido importar `HTTPException` de FastAPI.
+- `service.py` orquesta casos de uso, maneja tolerancia a fallos y expone la función proveedora de dependencias del módulo (`get_survey_manager`, `get_categorization_service`). Prohibido importar `HTTPException` de FastAPI.
 - `engine.py` ejecuta matemática pura en memoria con `Decimal`. Prohibido tocar base de datos o librerías web.
 - `repository.py` encapsula SQLAlchemy filtrando siempre por `user_id` (`WHERE client_id = :user_id`).
 
@@ -261,21 +258,21 @@ $$\text{router} \longrightarrow \text{service} \longrightarrow \begin{cases} \te
 ## 5. Diseño de Datos y Contratos (`02_Interaction_and_Data_Design.md`)
 
 ### 5.1 Esquema Relacional en PostgreSQL (`g1-team-5-db`)
-1. **`client`:**
+1. **`client` (`src/core/models.py`):**
    - `client_id` (UUID, PK — corresponde a `user_id` en Python y `userId` en UML/API), `email` (VARCHAR, UNIQUE, NOT NULL), `created_at` (TIMESTAMP).
-2. **`survey`:**
+2. **`survey` (`src/survey/models.py`):**
    - `survey_id` (UUID, PK), `client_id` (UUID, FK $\rightarrow$ `client`), `status` (VARCHAR: `'DRAFT'`, `'COMPLETED'`), `started_at`, `completed_at` (nullable), `updated_at`.
    - *Restricciones:* Índice único parcial sobre `(client_id) WHERE status = 'DRAFT'` (máximo un borrador abierto por cliente, `BR-02`).
-3. **`question`:**
+3. **`question` (`src/survey/models.py`):**
    - `question_id` (INT, PK), `text` (VARCHAR, NOT NULL), `weight` (NUMERIC, NOT NULL, $\ge 0$), `display_order` (INT, UNIQUE en catálogo activo), `is_required` (BOOLEAN), `is_active` (BOOLEAN).
    - *Restricciones:* Máximo 10 preguntas activas (`BR-01`).
-4. **`question_option`:**
+4. **`question_option` (`src/survey/models.py`):**
    - `id` (INT, PK autoincremental), `question_id` (INT, FK $\rightarrow$ `question.question_id`, `ON DELETE CASCADE`), `option_number` (INT, $> 0$), `text` (VARCHAR, NOT NULL), `value` (NUMERIC, NOT NULL).
    - *Restricciones:* Restricción `UNIQUE (question_id, option_number)`. `value` solo se usa en backend para resolver `answer.option_value`; nunca se expone en `CT-01`.
-5. **`answer`:**
+5. **`answer` (`src/survey/models.py`):**
    - `answer_id` (UUID, PK), `survey_id` (UUID, FK $\rightarrow$ `survey`), `question_id` (INT, FK $\rightarrow$ `question`), `selected_option` (INT, $> 0$), `option_value` (NUMERIC, NOT NULL).
    - *Restricciones:* Restricción `UNIQUE (survey_id, question_id)`.
-6. **`financial_profile`:**
+6. **`financial_profile` (`src/categorization/models.py`):**
    - `profile_id` (UUID, PK), `client_id` (UUID, FK $\rightarrow$ `client`, UNIQUE), `survey_id` (UUID, FK $\rightarrow$ `survey`, NOT NULL), `assigned_category` (VARCHAR: `'CONSERVATIVE'`, `'MODERATE'`, `'AGGRESSIVE'`, `'UNDER_EVALUATION'`), `evaluation_status` (VARCHAR: `'COMPLETED'`, `'ERROR'`), `total_score` (NUMERIC, NULLABLE), `assigned_at` (TIMESTAMP).
    - *Restricciones:* Relación 0..1 por cliente (se actualiza mediante *upsert* por `client_id`, `BR-04`). Si `evaluation_status = 'ERROR'`, entonces `assigned_category = 'UNDER_EVALUATION'` y `total_score IS NULL` (`BR-06`).
 
@@ -297,11 +294,11 @@ $$\text{router} \longrightarrow \text{service} \longrightarrow \begin{cases} \te
 - [x] **Bitácora `2026-11-12` (Bloque 3 — Infraestructura, ADRs y Contratos):** Alineación de infraestructura con el servidor PostgreSQL externo del curso (`g1-team-5-db`), contenedores `docker-compose.yml`/`Dockerfile` exclusivos para backend y frontend en la VM `CentOS Stream 10` (`/opt/projects-g1/team-5`), inclusión del saneamiento previo de tablas residuales en `g1-team-5-db` antes de Alembic, formalización de `ADR-0003` a `ADR-0006` (y actualización de `ADR-0001`/`ADR-0002`), y reconciliación de `01`, `02` y `code_style.md` con `docs/contracts/` (`CT-01`..`CT-12`).
 - [x] `ADR-0001`: Selección del Stack Tecnológico e Infraestructura (`g1-team-5-db` + Docker backend/frontend).
 - [x] `ADR-0002`: Estrategia Híbrida (*Walking Skeleton* + *Vertical Slices*).
-- [x] `ADR-0003`: Partición modular por dominio (`survey/`, `categorization/`) y propiedad de datos por `client_id`.
+- [x] `ADR-0003`: Partición modular por dominio (`survey/`, `categorization/`), `ClientModel` transversal en `core/models.py` y propiedad de datos por `client_id`.
 - [x] `ADR-0004`: Persistencia unitaria progresiva, bloqueo pesimista (`SELECT ... FOR UPDATE`) e índice único parcial de borrador.
 - [x] `ADR-0005`: Tolerancia síncrona a fallos de evaluación (`UNDER_EVALUATION`) sin brokers de mensajería.
 - [x] `ADR-0006`: Ocultamiento de existencia (`404` vs. `403`), inyección server-side de `user_id` y logs sin PII.
-- [x] `ADR-0007`: Aislamiento de adaptadores API (`mockSurveyApi` vs `httpSurveyApi`) y cliente `fetch` nativo en frontend.
+- [x] `ADR-0007`: Aislamiento de adaptadores API (`httpSurveyApi` activo por defecto vs `mockSurveyApi` opt-in con `VITE_USE_MOCK_API=true`) y cliente `fetch` nativo en frontend.
 - [x] `01_Architectural_and_Detailed_Design.md`, `02_Interaction_and_Data_Design.md`, `code_style.md`, `estructura_repositorio.md` y `docs/contracts/` (`CT-01`..`CT-12` `v1.2`).
 
 ---
@@ -309,21 +306,22 @@ $$\text{router} \longrightarrow \text{service} \longrightarrow \begin{cases} \te
 ### [x] Fase 0: Walking Skeleton (Completada — Infraestructura VM, Frontend React y Backend FastAPI + Alembic)
 *Objetivo: Dejar operativa toda la tubería tecnológica E2E antes de codificar las reglas financieras. Criterio de salida: clonar repo, limpiar la BD externa `g1-team-5-db`, ejecutar migraciones Alembic desde cero, levantar contenedores backend/frontend (`docker-compose.yml`) conectados a `g1-team-5-db` (incluyendo verificación en la VM `CentOS Stream 10`, directorio `/opt/projects-g1/team-5`), ver una petición viajando desde React hasta PostgreSQL y pasar `pytest` en verde.*
 
-- [x] **Bitácora `2026-11-12` (Bloque 4 — Frontend Walking Skeleton y Base de Encuesta):** Inicialización de `frontend/` (React + Vite + TypeScript `strict`), ESLint (`no-explicit-any`, máx. 100 caracteres), Prettier, cliente HTTP (`src/api/httpClient.ts`), banner de conectividad (`/api/health` vs `VITE_USE_MOCK_API`), flujo completo de encuesta sobre contratos `CT-01`, `CT-06` y `CT-09` con adaptador mock aislado (`ADR-0007`) y suite Vitest en verde (5 archivos, 17 pruebas).
-- [x] **Bitácora `2026-11-12` (Bloque 5 — Backend Walking Skeleton y Saneamiento de Integración):** Implementación de `backend/` (`src/core/`, `src/survey/`, `src/categorization/`), desacoplamiento de `SurveyRouter` mediante `src/core/dependencies.py`, bloqueo pesimista `with_for_update()` en `save_answer` y `update_status`, alineación de `QuestionOptionDTO` (`{ selectedOption, label }`) con el frontend React, migración Alembic inicial de 6 tablas (`question_option` incluida) con semilla de Fase 0, y reorganización de pruebas en `backend/tests/survey/` y `backend/tests/categorization/` pasando `ruff`, `mypy` y `pytest` en verde.
+- [x] **Bitácora `2026-11-12` (Bloque 4 — Frontend Walking Skeleton y Base de Encuesta):** Inicialización de `frontend/` (React + Vite + TypeScript `strict`), ESLint (`no-explicit-any`, máx. 100 caracteres), Prettier, cliente HTTP (`src/api/httpClient.ts`), banner de conectividad (`/api/health` vs `VITE_USE_MOCK_API`), flujo completo de encuesta sobre contratos `CT-01`, `CT-06` y `CT-09` con adaptador mock aislado (`ADR-0007`) y suite Vitest en verde.
+- [x] **Bitácora `2026-11-12` (Bloque 5 — Backend Walking Skeleton y Saneamiento de Integración):** Implementación de `backend/` (`src/core/`, `src/survey/`, `src/categorization/`), bloqueo pesimista `with_for_update()` en `save_answer` y `update_status`, alineación de `QuestionOptionDTO` (`{ selectedOption, label }`) con el frontend React, migración Alembic inicial de 6 tablas (`question_option` incluida) con semilla de Fase 0, y reorganización de pruebas en `backend/tests/survey/` y `backend/tests/categorization/`.
+- [x] **Bitácora `2026-11-12` (Bloque 6 — Reconciliación 1:1 Código $\leftrightarrow$ Documentación y Ajustes de Producción VM):** Desacoplamiento total de `src/core/` eliminando `core/dependencies.py` y definiendo constructores `Depends` por módulo (`get_categorization_service` en `categorization/service.py` y `get_survey_manager` en `survey/service.py`), traslado de `ClientModel` a `src/core/models.py` (`ADR-0003`), eliminación de `database_url` por defecto en `src/core/config.py` (fail-fast sin `DATABASE_URL`), calibración y marcado explícito de datos provisionales de Fase 0 en `seed_phase0.py` y `mockSurveyApi.ts` (`65.00` $\rightarrow$ `MODERATE`), activación de modo HTTP real por defecto en frontend (`VITE_USE_MOCK_API=false`) con token provisional `dev-user-1` en builds de producción (`CT-02`), pruebas de índice parcial `DRAFT`, precisión `Decimal` y `FOR UPDATE` en `pytest` (16/16 en verde) y `Vitest` (20/20 en verde), y sincronización 1:1 de todos los documentos y diagramas.
 - [x] **1. Saneamiento de BD Externa (`g1-team-5-db`) e Infraestructura Docker:**
   - [x] **Prerrequisito obligatorio antes de Alembic** (realizado el 2026-11-13: `g1-team-5-db` quedó sin tablas): Vaciar/limpiar las tablas residuales y `alembic_version` actualmente alojadas en el servidor PostgreSQL externo del curso (`g1-team-5-db`) provenientes de migraciones revertidas en `main`, para ejecutar Alembic desde cero sin conflictos de esquema.
   - [x] Crear `.env.example` (con `DATABASE_URL` apuntando a `g1-team-5-db`, sin credenciales reales) y `.gitignore` para Python, Node y entornos locales.
   - [x] Crear `backend/Dockerfile`, `frontend/Dockerfile` y `docker-compose.yml` en la raíz **exclusivamente** para el backend (FastAPI) y el frontend (React/Vite), permitiendo desarrollo reproducible y despliegue en la VM del curso (`CentOS Stream 10`, directorio `/opt/projects-g1/team-5`) contra `g1-team-5-db`.
 - [x] **2. Esqueleto de Backend (`backend/`):**
   - [x] Configurar `backend/pyproject.toml` (dependencias: `fastapi`, `uvicorn`, `sqlalchemy`, `psycopg`, `alembic`, `pydantic`, `pydantic-settings`; dev: `pytest`, `ruff`, `mypy`, `httpx`).
-  - [x] Implementar `src/core/config.py`, `src/core/database.py`, `src/core/dependencies.py`, `src/core/exceptions.py`, `src/core/schemas.py` (`CamelCaseSchema`) y `src/core/auth_deps.py` (dependencia de `user_id` con regla provisional de Fase 0).
-  - [x] Configurar Alembic (`alembic/`) y generar la migración inicial sobre `g1-team-5-db` limpia con las 6 tablas del modelo ER (`client`, `survey`, `question`, `question_option`, `answer`, `financial_profile`) y semilla inicial de Fase 0.
+  - [x] Implementar `src/core/config.py` (`database_url` obligatorio), `src/core/database.py`, `src/core/models.py` (`ClientModel`), `src/core/exceptions.py`, `src/core/schemas.py` (`CamelCaseSchema`) y `src/core/auth_deps.py` (dependencia de `user_id` con regla provisional de Fase 0).
+  - [x] Configurar Alembic (`alembic/`) y generar la migración inicial sobre `g1-team-5-db` limpia con las 6 tablas del modelo ER (`client`, `survey`, `question`, `question_option`, `answer`, `financial_profile`) y semilla inicial de Fase 0 (`scripts/seed_phase0.py`).
   - [x] Crear estructura modular en `src/survey/` y `src/categorization/` junto con `GET /api/health` y los endpoints `CT-01`, `CT-06` y `CT-09` en `src/main.py`.
 - [x] **3. Contrato OpenAPI y Esqueleto de Frontend (`frontend/`):**
-  - [x] Inicializar aplicación React + Vite + TypeScript en `frontend/` con cliente HTTP (`httpClient.ts`), indicador `/api/health` y base de encuesta (`CT-01`, `CT-06`, `CT-09`) con adaptador mock/HTTP y pruebas Vitest en verde.
+  - [x] Inicializar aplicación React + Vite + TypeScript en `frontend/` con cliente HTTP (`httpClient.ts`), indicador `/api/health` y base de encuesta (`CT-01`, `CT-06`, `CT-09`) con adaptador HTTP real activo por defecto (`VITE_USE_MOCK_API=false`) y pruebas Vitest en verde (20/20).
   - [x] Configurar script `generate:api` (`openapi-typescript`) en `package.json` para exportar esquemas de FastAPI a `frontend/src/api/generated/`.
-  - [x] Conectar pantalla base en React consumiendo el backend real (`VITE_USE_MOCK_API=false`) y ejecutar suite `pytest` en verde.
+  - [x] Conectar pantalla base en React consumiendo el backend real (`VITE_USE_MOCK_API=false`) y ejecutar suite `pytest` en verde (16/16).
 
 ---
 
@@ -355,7 +353,7 @@ $$\text{router} \longrightarrow \text{service} \longrightarrow \begin{cases} \te
 
 ## 7. Preguntas Abiertas y Supuestos Registrados en Diseño
 
-1. **Valores numéricos exactos de los umbrales de categoría:** `REQ-01` y `BR-05` especifican el comportamiento de desempate en el umbral, pero los valores exactos de corte entre `CONSERVATIVE`, `MODERATE` y `AGGRESSIVE` dependen de definición de producto/finanzas. En el código se parametrizarán en el constructor/configuración de `ScoringEngine` (ej. `conservative_threshold`, `moderate_threshold`).
+1. **Valores numéricos exactos de los umbrales de categoría (Calibración provisional en Fase 0):** `REQ-01` y `BR-05` especifican el comportamiento de desempate en el umbral, pero los valores definitivos de corte entre `CONSERVATIVE`, `MODERATE` y `AGGRESSIVE` dependen de definición de producto/finanzas. En Fase 0 (`ScoringEngine`, `backend/scripts/seed_phase0.py` y `frontend/src/features/survey/api/mockSurveyApi.ts`) se parametrizan explícitamente umbrales provisionales (`50.00` y `80.00`) y opciones calibradas para que responder opciones intermedias produzca `65.00` (`MODERATE`).
 2. **Catálogo de opciones por pregunta (`selected_option`) — Resuelto (2026-11-12):** Formalizado en `02` §2.2 mediante la tabla `question_option (id, question_id, option_number, text, value)`. `CT-01` expone `{ selectedOption, label }` (ocultando `value`) y `CT-06` valida `selectedOption` contra `question_option.option_number` para resolver `answer.option_value`.
-3. **Fallo doble en persistencia provisional y recuperación HTTP:** Si en el Escenario 3 también falla la escritura de `UNDER_EVALUATION` en la BD, no se introduce cola de mensajería (`ADR-0001`, `ADR-0005`). Queda pendiente confirmar el mapeo HTTP propuesto para `EvaluationPersistenceError` (`503 Service Unavailable` en `CT-09`) y el contrato de consulta del perfil (`CategorizationRouter` / `ProfileRepository.find_by_user_id`) para recuperación si se pierde la respuesta HTTP de `completeSurvey`.
-4. **Autenticación y Resumen del Plan:** El módulo de login/registro no hace parte del alcance de diseño detallado de `REQ-01` (se asume `user_id` provisto por `Depends(get_current_user)` según `ADR-0006` y regla provisional de Fase 0 en `CT-02`), y el resumen del plan en el paso 6 es una vista derivada de la categoría asignada, no un módulo de persistencia independiente.
+3. **Fallo doble en persistencia provisional y recuperación HTTP:** Si en el Escenario 3 también falla la escritura de `UNDER_EVALUATION` en la BD, no se introduce cola de mensajería (`ADR-0001`, `ADR-0005`). El mapeo HTTP en `CT-09` responde `503 Service Unavailable` para `EvaluationPersistenceError`, quedando pendiente para futuras iteraciones el contrato HTTP de consulta directa del perfil (`CategorizationRouter` / `ProfileRepository.find_by_user_id`) si se pierde la respuesta HTTP de `completeSurvey`.
+4. **Autenticación y Resumen del Plan:** El módulo de login/registro no hace parte del alcance de diseño detallado de `REQ-01` (se asume `user_id` provisto por `Depends(get_current_user)` según `ADR-0006` y regla provisional de Fase 0 en `CT-02` con `ClientModel` en `src/core/models.py`), y el resumen del plan en el paso 6 es una vista derivada de la categoría asignada, no un módulo de persistencia independiente.

@@ -14,4 +14,18 @@ export function createSurveyApi(useMock = isMockApiEnabled()): SurveyApiPort {
   return useMock ? mockSurveyApi : httpSurveyApi;
 }
 
-export const surveyApi: SurveyApiPort = createSurveyApi();
+/**
+ * Adaptador activo por defecto: usa HTTP real contra FastAPI salvo que
+ * VITE_USE_MOCK_API === "true" esté habilitado explícitamente.
+ */
+export const surveyApi: SurveyApiPort = {
+  startSurvey() {
+    return createSurveyApi().startSurvey();
+  },
+  saveAnswer(surveyId, payload) {
+    return createSurveyApi().saveAnswer(surveyId, payload);
+  },
+  completeSurvey(surveyId) {
+    return createSurveyApi().completeSurvey(surveyId);
+  },
+};
