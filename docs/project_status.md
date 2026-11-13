@@ -31,7 +31,7 @@ Aplicación web interactiva que permite a los usuarios descubrir y registrar su 
 
 | Identificador | Regla / Decisión | Restricción Técnica Obligatoria |
 | :--- | :--- | :--- |
-| **`ADR-0001`** | **Stack Tecnológico e Infraestructura** | **Frontend:** React + Vite + TypeScript 5+. **Backend:** Python 3.11+ con FastAPI, SQLAlchemy 2.0 y Pydantic v2. **Base de Datos:** servidor PostgreSQL externo del curso (`g1-team-5-db`) conectado vía `DATABASE_URL` en `.env`. **Contenedores:** `docker-compose.yml` y `Dockerfile` solo para backend y frontend en desarrollo y en la VM del curso (`CentOS Stream 10`, directorio `projects-gl/team-5`). |
+| **`ADR-0001`** | **Stack Tecnológico e Infraestructura** | **Frontend:** React + Vite + TypeScript 5+. **Backend:** Python 3.11+ con FastAPI, SQLAlchemy 2.0 y Pydantic v2. **Base de Datos:** servidor PostgreSQL externo del curso (`g1-team-5-db`) conectado vía `DATABASE_URL` en `.env`. **Contenedores:** `docker-compose.yml` y `Dockerfile` solo para backend y frontend en desarrollo y en la VM del curso (`CentOS Stream 10`, directorio `/opt/projects-g1/team-5`). |
 | **`ADR-0001` / `code_style.md`** | **Precisión Numérica Estricta (Cero `float`)** | **Prohibido usar `float`** para puntajes, pesos de preguntas, valores de opción o montos. En Python se usa exclusivamente `decimal.Decimal` inicializado desde `str` o `int` (ej. `Decimal("0.15")`). En PostgreSQL se usa `NUMERIC(precision, scale)` con `asdecimal=True`. En TypeScript viajan como `string`. |
 | **`ADR-0002`** | **Construcción Híbrida Incremental** | **Fase 0:** *Walking Skeleton* (tubería E2E mínima tras limpiar tablas residuales y `alembic_version` en `g1-team-5-db`). **Fases 1 a 3:** *Vertical Slices* por escenario de `REQ-01`. Prohibido desarrollar por capas horizontales aisladas. |
 | **`ADR-0003` / `estructura_repositorio.md`** | **Arquitectura Modular y Data Ownership** | División primaria por módulos de dominio (`survey/`, `categorization/`) y secundaria por capas (`router` $\rightarrow$ `service` $\rightarrow$ `engine`/`repository` $\rightarrow$ `models`). Ningún módulo puede importar `models.py` o `repository.py` de otro módulo; el cruce usa DTOs (`ScoredAnswerDTO`, `EvaluationResult`) y aislamiento por `client_id`. |
@@ -133,7 +133,7 @@ Esta es la estructura completa hacia la cual evolucionará el repositorio durant
 Grupo-5-Finanzas-Ingesoft_I_UN_2026-II/
 ├── README.md                                            # Descripción general e instrucciones de arranque
 ├── .env.example                                         # Plantilla con DATABASE_URL hacia g1-team-5-db (sin credenciales reales)
-├── docker-compose.yml                                   # Orquestación exclusiva de backend y frontend (dev y VM CentOS Stream 10: projects-gl/team-5)
+├── docker-compose.yml                                   # Orquestación exclusiva de backend y frontend (dev y VM CentOS Stream 10: /opt/projects-g1/team-5)
 ├── docs/                                                # Documentación de Ingeniería (YA EXISTENTE)
 │   ├── code_style.md                                    # Estándares Ruff, ESLint, Decimal, Logs
 │   ├── estructura_repositorio.md                        # Reglas de monorepo y capas
@@ -156,6 +156,7 @@ Grupo-5-Finanzas-Ingesoft_I_UN_2026-II/
 │       └── rfc_proyecto.md
 ├── backend/                                             # API REST y Lógica de Negocio (POR CONSTRUIR)
 │   ├── Dockerfile                                       # Imagen reproducible del backend FastAPI
+│   ├── entrypoint.sh                                    # Arranque: migraciones Alembic + uvicorn
 │   ├── pyproject.toml                                   # Configuración de dependencias, Ruff, Mypy y Pytest
 │   ├── alembic/                                         # Migraciones de esquema sobre PostgreSQL externo (g1-team-5-db)
 │   │   └── versions/
@@ -182,6 +183,7 @@ Grupo-5-Finanzas-Ingesoft_I_UN_2026-II/
 │       └── integration/                                 # Ej: test_evaluate_profile.py contra g1-team-5-db (Escenarios 1, 2 y 3)
 └── frontend/                                            # Aplicación Web Cliente React + Vite + TS (POR CONSTRUIR)
     ├── Dockerfile                                       # Imagen reproducible del frontend React + Vite
+    ├── nginx.conf                                       # Sirve el build y reenvía /api/ al backend
     ├── package.json                                     # Dependencias y scripts (openapi-typescript, vitest)
     ├── tsconfig.json                                    # Configuración estricta de TypeScript
     └── src/
@@ -270,7 +272,7 @@ $$\text{router} \longrightarrow \text{service} \longrightarrow \begin{cases} \te
 - [x] Especificación de requerimiento Capstone `REQ-01` (User Story, Criterios Gherkin, Caso de Uso y Diagrama de Flujo).
 - [x] **Bitácora `2026-11-12` (Bloque 1 — `REQ-01`):** Alineación integral de `docs/req/REQ-01.md` con `02_Interaction_and_Data_Design.md` y `docs/code_style.md`, y rediseño atómico de las reglas de negocio (`BR-01` a `BR-06`) ordenadas según el ciclo de vida del caso de uso.
 - [x] **Bitácora `2026-11-12` (Bloque 2 — Diseños y Naming):** Sincronización de `01_Architectural_and_Detailed_Design.md` (`v1.1`), `02_Interaction_and_Data_Design.md`, `adr-0002.md` (renombrado desde `adr_0002.md`), `code_style.md`, `estructura_repositorio.md` y `project_status.md` con `BR-01`..`BR-06`, `saveAnswer`/`save_answer`, `SurveyStatus` `{DRAFT, COMPLETED}`, excepciones unificadas y tablas PostgreSQL en `snake_case`. Clarificación de `CategorizationService` con estereotipo `<<external>>` en el Diagrama B y estandarización del encabezado de trazabilidad a `Scenario / Rule / Constraint`.
-- [x] **Bitácora `2026-11-12` (Bloque 3 — Infraestructura, ADRs y Contratos):** Alineación de infraestructura con el servidor PostgreSQL externo del curso (`g1-team-5-db`), contenedores `docker-compose.yml`/`Dockerfile` exclusivos para backend y frontend en la VM `CentOS Stream 10` (`projects-gl/team-5`), inclusión del saneamiento previo de tablas residuales en `g1-team-5-db` antes de Alembic, formalización de `ADR-0003` a `ADR-0006` (y actualización de `ADR-0001`/`ADR-0002`), y reconciliación de `01`, `02` y `code_style.md` con `docs/contracts/` (`CT-01`..`CT-12`).
+- [x] **Bitácora `2026-11-12` (Bloque 3 — Infraestructura, ADRs y Contratos):** Alineación de infraestructura con el servidor PostgreSQL externo del curso (`g1-team-5-db`), contenedores `docker-compose.yml`/`Dockerfile` exclusivos para backend y frontend en la VM `CentOS Stream 10` (`/opt/projects-g1/team-5`), inclusión del saneamiento previo de tablas residuales en `g1-team-5-db` antes de Alembic, formalización de `ADR-0003` a `ADR-0006` (y actualización de `ADR-0001`/`ADR-0002`), y reconciliación de `01`, `02` y `code_style.md` con `docs/contracts/` (`CT-01`..`CT-12`).
 - [x] `ADR-0001`: Selección del Stack Tecnológico e Infraestructura (`g1-team-5-db` + Docker backend/frontend).
 - [x] `ADR-0002`: Estrategia Híbrida (*Walking Skeleton* + *Vertical Slices*).
 - [x] `ADR-0003`: Partición modular por dominio (`survey/`, `categorization/`) y propiedad de datos por `client_id`.
@@ -282,14 +284,14 @@ $$\text{router} \longrightarrow \text{service} \longrightarrow \begin{cases} \te
 
 ---
 
-### [ ] Fase 0: Walking Skeleton (En Progreso — Frontend Base Completado)
-*Objetivo: Dejar operativa toda la tubería tecnológica E2E antes de codificar las reglas financieras. Criterio de salida: clonar repo, limpiar la BD externa `g1-team-5-db`, ejecutar migraciones Alembic desde cero, levantar contenedores backend/frontend (`docker-compose.yml`) conectados a `g1-team-5-db` (incluyendo verificación en la VM `CentOS Stream 10`, directorio `projects-gl/team-5`), ver una petición viajando desde React hasta PostgreSQL y pasar `pytest` en verde.*
+### [ ] Fase 0: Walking Skeleton (En Progreso — Infraestructura y Frontend Base)
+*Objetivo: Dejar operativa toda la tubería tecnológica E2E antes de codificar las reglas financieras. Criterio de salida: clonar repo, limpiar la BD externa `g1-team-5-db`, ejecutar migraciones Alembic desde cero, levantar contenedores backend/frontend (`docker-compose.yml`) conectados a `g1-team-5-db` (incluyendo verificación en la VM `CentOS Stream 10`, directorio `/opt/projects-g1/team-5`), ver una petición viajando desde React hasta PostgreSQL y pasar `pytest` en verde.*
 
 - [x] **Bitácora `2026-11-12` (Bloque 4 — Frontend Walking Skeleton y Base de Encuesta):** Inicialización de `frontend/` (React + Vite + TypeScript `strict`), ESLint (`no-explicit-any`, máx. 100 caracteres), Prettier, cliente HTTP (`src/api/httpClient.ts`), banner de conectividad (`/health` vs `VITE_USE_MOCK_API`), flujo completo de encuesta sobre contratos `CT-01`, `CT-06` y `CT-09` con adaptador mock aislado (`ADR-0007`) y suite Vitest en verde (4 archivos, 10 pruebas).
-- [ ] **1. Saneamiento de BD Externa (`g1-team-5-db`) e Infraestructura Docker:**
-  - [ ] **Prerrequisito obligatorio antes de Alembic:** Vaciar/limpiar las tablas residuales y `alembic_version` actualmente alojadas en el servidor PostgreSQL externo del curso (`g1-team-5-db`) provenientes de migraciones revertidas en `main`, para ejecutar Alembic desde cero sin conflictos de esquema.
+- [x] **1. Saneamiento de BD Externa (`g1-team-5-db`) e Infraestructura Docker:**
+  - [x] **Prerrequisito obligatorio antes de Alembic** (realizado el 2026-11-13: `g1-team-5-db` quedó sin tablas): Vaciar/limpiar las tablas residuales y `alembic_version` actualmente alojadas en el servidor PostgreSQL externo del curso (`g1-team-5-db`) provenientes de migraciones revertidas en `main`, para ejecutar Alembic desde cero sin conflictos de esquema.
   - [x] Crear `.env.example` (con `DATABASE_URL` apuntando a `g1-team-5-db`, sin credenciales reales) y `.gitignore` para Python, Node y entornos locales.
-  - [x] Crear `backend/Dockerfile`, `frontend/Dockerfile` y `docker-compose.yml` en la raíz **exclusivamente** para el backend (FastAPI) y el frontend (React/Vite), permitiendo desarrollo reproducible y despliegue en la VM del curso (`CentOS Stream 10`, directorio `projects-gl/team-5`) contra `g1-team-5-db`.
+  - [x] Crear `backend/Dockerfile`, `frontend/Dockerfile` y `docker-compose.yml` en la raíz **exclusivamente** para el backend (FastAPI) y el frontend (React/Vite), permitiendo desarrollo reproducible y despliegue en la VM del curso (`CentOS Stream 10`, directorio `/opt/projects-g1/team-5`) contra `g1-team-5-db`.
 - [ ] **2. Esqueleto de Backend (`backend/`):**
   - [ ] Configurar `backend/pyproject.toml` (dependencias: `fastapi`, `uvicorn`, `sqlalchemy`, `psycopg`/`asyncpg`, `alembic`, `pydantic`, `pydantic-settings`; dev: `pytest`, `ruff`, `mypy`, `httpx`).
   - [ ] Implementar `src/core/config.py`, `src/core/database.py`, `src/core/schemas.py` (`CamelCaseSchema`) y `src/core/auth_deps.py` (dependencia de `user_id`).
