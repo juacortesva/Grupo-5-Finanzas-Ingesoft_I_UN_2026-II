@@ -1,9 +1,5 @@
 import { requestJson } from "../../../api/httpClient";
-import {
-  EvaluationResultResponse,
-  SaveAnswerRequest,
-  SurveyDraftResponse,
-} from "../types";
+import { EvaluationResultResponse, SaveAnswerRequest, SurveyDraftResponse } from "../types";
 import { SurveyApiPort } from "./surveyApi";
 
 /** Adaptador HTTP real contra FastAPI para los contratos CT-01, CT-06 y CT-09. */

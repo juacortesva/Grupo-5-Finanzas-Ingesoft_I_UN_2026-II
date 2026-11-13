@@ -21,7 +21,7 @@ export function isMockApiEnabled(): boolean {
   return import.meta.env.VITE_USE_MOCK_API !== "false";
 }
 
-/** Verifica la conectividad del Walking Skeleton contra /health o el modo mock. */
+/** Verifica la conectividad del Walking Skeleton contra /api/health o el modo mock. */
 export async function checkBackendConnectivity(): Promise<ConnectivityStatus> {
   if (isMockApiEnabled()) {
     return {
@@ -32,17 +32,17 @@ export async function checkBackendConnectivity(): Promise<ConnectivityStatus> {
   }
 
   try {
-    await requestJson<HealthResponse>("/health");
+    await requestJson<HealthResponse>("/api/health");
     return {
       mode: ConnectivityMode.LIVE,
       isConnected: true,
-      message: "Conectado al backend FastAPI (/health)",
+      message: "Conectado al backend FastAPI (/api/health)",
     };
   } catch {
     return {
       mode: ConnectivityMode.LIVE,
       isConnected: false,
-      message: "Sin conexión con el backend FastAPI (/health)",
+      message: "Sin conexión con el backend FastAPI (/api/health)",
     };
   }
 }

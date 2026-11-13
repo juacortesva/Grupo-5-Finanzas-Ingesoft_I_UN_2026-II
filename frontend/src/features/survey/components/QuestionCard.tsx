@@ -16,9 +16,7 @@ export function QuestionCard({
   return (
     <section className="question-card" aria-labelledby={`question-${question.questionId}`}>
       <div className="question-header">
-        <span className="question-badge">
-          {question.isRequired ? "Obligatoria" : "Opcional"}
-        </span>
+        <span className="question-badge">{question.isRequired ? "Obligatoria" : "Opcional"}</span>
       </div>
 
       <h2 id={`question-${question.questionId}`} className="question-title">

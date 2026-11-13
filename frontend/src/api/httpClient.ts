@@ -38,6 +38,40 @@ export function setAuthTokenProvider(provider: TokenProvider): void {
   tokenProvider = provider;
 }
 
+/**
+ * Resuelve el token Bearer para la petición según CT-02:
+ * 1. Proveedor configurado vía setAuthTokenProvider (si retorna valor no vacío).
+ * 2. Variable de entorno VITE_DEV_AUTH_TOKEN.
+ * 3. Token almacenado en localStorage ("auth_token").
+ * 4. Fallback automático a "dev-user-1" en desarrollo (import.meta.env.DEV).
+ */
+export function resolveAuthToken(): string | null {
+  const customToken = tokenProvider();
+  if (customToken !== null && customToken.trim().length > 0) {
+    return customToken;
+  }
+
+  const envToken = import.meta.env.VITE_DEV_AUTH_TOKEN;
+  if (typeof envToken === "string" && envToken.trim().length > 0) {
+    return envToken;
+  }
+
+  try {
+    const storageToken = globalThis.localStorage?.getItem("auth_token");
+    if (typeof storageToken === "string" && storageToken.trim().length > 0) {
+      return storageToken;
+    }
+  } catch {
+    // Entorno sin acceso a localStorage (por ejemplo, SSR o sandbox restringido).
+  }
+
+  if (import.meta.env.DEV) {
+    return "dev-user-1";
+  }
+
+  return null;
+}
+
 function hasDetailField(payload: unknown): payload is { detail: string } {
   if (typeof payload !== "object" || payload === null) {
     return false;
@@ -67,10 +101,7 @@ function resolveBaseUrl(): string {
 }
 
 /** Ejecuta una petición HTTP JSON aplicando autenticación Bearer y parseo de errores. */
-export async function requestJson<T>(
-  path: string,
-  options: HttpRequestOptions = {},
-): Promise<T> {
+export async function requestJson<T>(path: string, options: HttpRequestOptions = {}): Promise<T> {
   const headers: Record<string, string> = {
     Accept: "application/json",
     ...options.headers,
@@ -80,7 +111,7 @@ export async function requestJson<T>(
     headers["Content-Type"] = "application/json";
   }
 
-  const token = tokenProvider();
+  const token = resolveAuthToken();
   if (token !== null && token.trim().length > 0) {
     headers.Authorization = `Bearer ${token}`;
   }

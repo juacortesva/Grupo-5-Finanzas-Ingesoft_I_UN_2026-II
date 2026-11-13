@@ -33,12 +33,7 @@ export function SurveyView() {
   }
 
   if (result !== null) {
-    return (
-      <SurveyResultCard
-        result={result}
-        onRestart={() => void restartSurvey()}
-      />
-    );
+    return <SurveyResultCard result={result} onRestart={() => void restartSurvey()} />;
   }
 
   const answeredCount = Object.keys(selectedOptionByQuestion).length;

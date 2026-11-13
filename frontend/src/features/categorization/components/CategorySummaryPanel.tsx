@@ -20,8 +20,8 @@ export function CategorySummaryPanel({ result }: CategorySummaryPanelProps) {
 
       {isProvisional ? (
         <div className="provisional-notice" role="status">
-          No fue posible calcular tu puntaje definitivo en este intento, pero tu encuesta
-          quedó registrada y puedes continuar hacia el panel principal.
+          No fue posible calcular tu puntaje definitivo en este intento, pero tu encuesta quedó
+          registrada y puedes continuar hacia el panel principal.
         </div>
       ) : (
         <p className="category-score">

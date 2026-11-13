@@ -1,9 +1,5 @@
 import { isMockApiEnabled } from "../../../api/healthService";
-import {
-  EvaluationResultResponse,
-  SaveAnswerRequest,
-  SurveyDraftResponse,
-} from "../types";
+import { EvaluationResultResponse, SaveAnswerRequest, SurveyDraftResponse } from "../types";
 import { httpSurveyApi } from "./httpSurveyApi";
 import { mockSurveyApi } from "./mockSurveyApi";
 

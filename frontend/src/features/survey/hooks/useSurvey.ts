@@ -2,11 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { ApiError } from "../../../api/httpClient";
 import { findNextPendingQuestionIndex } from "../../../shared/utils/formatters";
 import { SurveyApiPort, surveyApi } from "../api/surveyApi";
-import {
-  EvaluationResultResponse,
-  QuestionDto,
-  SurveyDraftResponse,
-} from "../types";
+import { EvaluationResultResponse, QuestionDto, SurveyDraftResponse } from "../types";
 
 export interface UseSurveyState {
   draft: SurveyDraftResponse | null;
@@ -62,9 +58,7 @@ export function useSurvey(api: SurveyApiPort = surveyApi): UseSurveyState {
     setSaveFeedback(null);
     try {
       const loadedDraft = await api.startSurvey();
-      const ordered = [...loadedDraft.questions].sort(
-        (a, b) => a.displayOrder - b.displayOrder,
-      );
+      const ordered = [...loadedDraft.questions].sort((a, b) => a.displayOrder - b.displayOrder);
       setDraft(loadedDraft);
       setSelectedMap(buildAnswerMap(loadedDraft));
       setCurrentIndex(findNextPendingQuestionIndex(ordered, loadedDraft.answers));
@@ -92,9 +86,7 @@ export function useSurvey(api: SurveyApiPort = surveyApi): UseSurveyState {
     if (sortedQuestions.length === 0) {
       return false;
     }
-    return sortedQuestions.every(
-      (q) => !q.isRequired || selectedMap[q.questionId] !== undefined,
-    );
+    return sortedQuestions.every((q) => !q.isRequired || selectedMap[q.questionId] !== undefined);
   }, [sortedQuestions, selectedMap]);
 
   const selectOption = useCallback(

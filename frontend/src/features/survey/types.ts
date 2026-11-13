@@ -14,16 +14,14 @@ export const FinancialCategory = {
   UNDER_EVALUATION: "UNDER_EVALUATION",
 } as const;
 
-export type FinancialCategory =
-  (typeof FinancialCategory)[keyof typeof FinancialCategory];
+export type FinancialCategory = (typeof FinancialCategory)[keyof typeof FinancialCategory];
 
 export const EvaluationStatus = {
   COMPLETED: "COMPLETED",
   ERROR: "ERROR",
 } as const;
 
-export type EvaluationStatus =
-  (typeof EvaluationStatus)[keyof typeof EvaluationStatus];
+export type EvaluationStatus = (typeof EvaluationStatus)[keyof typeof EvaluationStatus];
 
 export interface AnswerOptionDto {
   selectedOption: number;
