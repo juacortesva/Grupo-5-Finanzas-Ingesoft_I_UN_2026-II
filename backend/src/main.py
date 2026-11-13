@@ -26,7 +26,3 @@ def health_check() -> JSONResponse:
             status_code=503, content={"status": "error", "database": "unreachable"}
         )
     return JSONResponse(content={"status": "ok", "database": "ok"})
-
-
-# Los routers de los módulos de dominio se registran aquí, por ejemplo:
-# app.include_router(survey_router, prefix="/api")
