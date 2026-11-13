@@ -2,8 +2,8 @@
 
 | | |
 |---|---|
-| **Versión** | 1.1 (2026-11-12) — incorpora hallazgos F-01…F-21 de la auditoría de contratos |
-| **Estado** | Propuesto |
+| **Versión** | 1.2 (2026-11-12) — añade formato estándar de errores HTTP 401/404/409/422/503 |
+| **Estado** | Aprobado |
 | **Trazabilidad** | `REQ-01` · US-01 · AC-01.1, AC-01.3 · `BR-03`, `BR-04`, `BR-05`, `BR-06` · NFR de privacidad · `02` §1.1 (`completeSurvey`), §2.4, §3.2 (fila `completeSurvey`) · `01` §3.2 (`SurveyManager.completeSurvey`) |
 | **Contratos relacionados** | Usa CT-02, CT-07 (`findById`), CT-05 caso B (`save`) y CT-10 (`evaluateProfile`) |
 
@@ -58,6 +58,13 @@ Este archivo documenta **dos interfaces separadas**: la HTTP (§1.A), que consum
       "assignedCategory": "FinancialCategory (requerido; CONSERVATIVE | MODERATE | AGGRESSIVE | UNDER_EVALUATION)",
       "evaluationStatus": "EvaluationStatus (requerido; COMPLETED | ERROR)",
       "totalScore": "string | null (Decimal serializado, p. ej. \"57.50\"; null si y solo si evaluationStatus = ERROR)"
+    },
+    "errors": {
+      "401": { "detail": "No autenticado" },
+      "404": { "detail": "Encuesta no encontrada" },
+      "409": { "detail": "La encuesta ya fue completada" },
+      "422": { "detail": "Faltan respuestas obligatorias" },
+      "503": { "detail": "No fue posible completar la evaluación" }
     }
   },
   "service": {
@@ -87,13 +94,38 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/EvaluationResultResponse" }
-        "401": { description: No autenticado }
-        "404": { description: Encuesta inexistente o ajena }
-        "409": { description: Encuesta ya COMPLETED }
-        "422": { description: Faltan respuestas obligatorias }
-        "503": { description: "No fue posible completar la evaluación (fallo doble; código pendiente de decisión)" }
+        "401":
+          description: No autenticado
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+        "404":
+          description: Encuesta inexistente o ajena
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+        "409":
+          description: Encuesta ya COMPLETED
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+        "422":
+          description: Faltan respuestas obligatorias
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+        "503":
+          description: "No fue posible completar la evaluación (fallo doble; código pendiente de decisión)"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
 components:
   schemas:
+    ErrorResponse:
+      type: object
+      required: [detail]
+      properties:
+        detail: { type: string }
     EvaluationResultResponse:
       type: object
       required: [surveyId, assignedCategory, evaluationStatus, totalScore]
@@ -110,5 +142,5 @@ components:
 
 ## 5. Notas de alineación y preguntas abiertas
 
-* `01` §3.2 debería añadir el enum `EvaluationStatus { COMPLETED, ERROR }` y cambiar `EvaluationResult.status : String` por `evaluationStatus : EvaluationStatus`, con `totalScore : Decimal | null`.
+* *(Resuelto en `01` v1.2.)* `01` §3.2 debería añadir el enum `EvaluationStatus { COMPLETED, ERROR }` y cambiar `EvaluationResult.status : String` por `evaluationStatus : EvaluationStatus`, con `totalScore : Decimal | null`.
 * **Abierta (`02` §3.2):** si el cliente pierde la respuesta HTTP de un cierre exitoso, un reintento recibe 409. Hace falta una operación de consulta del perfil vigente (`CategorizationRouter` / `ProfileRepository.findByUserId`) para recuperar el resultado; no está cubierta por estos 12 contratos.

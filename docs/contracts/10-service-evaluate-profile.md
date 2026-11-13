@@ -2,8 +2,8 @@
 
 | | |
 |---|---|
-| **Versión** | 1.1 (2026-11-12) — incorpora hallazgos F-01…F-21 de la auditoría de contratos |
-| **Estado** | Propuesto |
+| **Versión** | 1.2 (2026-11-12) — aprobado |
+| **Estado** | Aprobado |
 | **Trazabilidad** | `REQ-01` · AC-01.1, AC-01.3 · `BR-04`, `BR-05`, `BR-06` · NFR de precisión numérica y de privacidad · `02` §1.1 (`evaluateProfile`), §3.1 (contrato detallado) · `01` §3.2 (Diagrama A), §3.4 (pseudocódigo) · `ADR-0001` |
 | **Contratos relacionados** | Lo invoca CT-09; usa CT-11 (`ScoringEngine`) y CT-12 (`saveCategory`) |
 
@@ -71,5 +71,7 @@
 | Reevaluación | Perfil vigente de `S0` | `evaluateProfile(U1, S2, answers')` | Un solo perfil para `U1`, ahora con `survey_id = S2` |
 
 ## 5. Notas de alineación con `01`
+
+> **Estado:** resuelto en `01` v1.2 y `02` v1.3 (2026-11-12). Se conserva como registro del cambio.
 
 * `01` §3.2 declara `evaluateProfile(userId, surveyId, answers : List~Answer~)`; debería recibir `List~ScoredAnswerDTO~`, que lleva el `weight`, para no acoplar el Módulo `categorization` a la entidad `Answer` del Módulo `survey`.

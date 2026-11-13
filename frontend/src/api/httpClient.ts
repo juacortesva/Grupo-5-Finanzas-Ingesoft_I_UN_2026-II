@@ -39,11 +39,12 @@ export function setAuthTokenProvider(provider: TokenProvider): void {
 }
 
 /**
- * Resuelve el token Bearer para la petición según CT-02:
+ * Resuelve el token Bearer para la petición según CT-02 y ADR-0006:
  * 1. Proveedor configurado vía setAuthTokenProvider (si retorna valor no vacío).
  * 2. Variable de entorno VITE_DEV_AUTH_TOKEN.
  * 3. Token almacenado en localStorage ("auth_token").
- * 4. Fallback automático a "dev-user-1" en desarrollo (import.meta.env.DEV).
+ * 4. Fallback provisional de Fase 0 a "dev-user-1" mientras la autenticación
+ *    provisional esté activa (desactivable con VITE_ENABLE_DEV_AUTH="false").
  */
 export function resolveAuthToken(): string | null {
   const customToken = tokenProvider();
@@ -65,7 +66,7 @@ export function resolveAuthToken(): string | null {
     // Entorno sin acceso a localStorage (por ejemplo, SSR o sandbox restringido).
   }
 
-  if (import.meta.env.DEV) {
+  if (import.meta.env.VITE_ENABLE_DEV_AUTH !== "false") {
     return "dev-user-1";
   }
 

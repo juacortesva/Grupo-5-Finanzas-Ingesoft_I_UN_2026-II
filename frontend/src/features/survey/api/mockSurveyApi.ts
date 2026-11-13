@@ -13,6 +13,12 @@ import { SurveyApiPort } from "./surveyApi";
 
 const MOCK_SURVEY_ID = "00000000-0000-4000-8000-000000000101";
 
+/**
+ * NOTA DE FASE 0 (WALKING SKELETON):
+ * Las preguntas, opciones, pesos y umbrales (50.00 / 80.00) de este adaptador
+ * simulado son DATOS FICTICIOS / PROVISIONALES para pruebas aisladas de UI,
+ * pendientes de validación definitiva por producto/finanzas.
+ */
 const MOCK_QUESTIONS: QuestionDto[] = [
   {
     questionId: 1,
@@ -96,18 +102,33 @@ export function resetMockSurveyState(partial?: Partial<MockStoreState>): void {
   store = { ...createInitialState(), ...partial };
 }
 
+/**
+ * Calibración provisional de Fase 0 sobre 5 preguntas (umbrales 50.00 y 80.00):
+ * - Opciones bajas (selectedOption=1 -> 7 pts c/u, suma <= 50.00): CONSERVATIVE
+ * - Opciones intermedias (selectedOption=2 -> 13 pts c/u, 5*13 = 65.00 entre 50 y 80): MODERATE
+ * - Opciones altas (selectedOption=3 -> 18 pts c/u, 5*18 = 90.00 > 80.00): AGGRESSIVE
+ */
 function resolveMockCategory(answers: AnswerDto[]): {
   category: FinancialCategory;
   score: string;
 } {
-  const optionSum = answers.reduce((acc, item) => acc + item.selectedOption, 0);
-  if (optionSum <= 7) {
-    return { category: FinancialCategory.CONSERVATIVE, score: "35.00" };
+  const provisionalPointsByOption: Readonly<Record<number, number>> = {
+    1: 7,
+    2: 13,
+    3: 18,
+  };
+  const totalScore = answers.reduce(
+    (acc, item) => acc + (provisionalPointsByOption[item.selectedOption] ?? 13),
+    0,
+  );
+  const formattedScore = `${totalScore}.00`;
+  if (totalScore <= 50) {
+    return { category: FinancialCategory.CONSERVATIVE, score: formattedScore };
   }
-  if (optionSum <= 11) {
-    return { category: FinancialCategory.MODERATE, score: "65.00" };
+  if (totalScore <= 80) {
+    return { category: FinancialCategory.MODERATE, score: formattedScore };
   }
-  return { category: FinancialCategory.AGGRESSIVE, score: "90.00" };
+  return { category: FinancialCategory.AGGRESSIVE, score: formattedScore };
 }
 
 /** Adaptador simulado fiel a CT-01, CT-06 y CT-09 para desarrollo independiente. */

@@ -1,15 +1,17 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { resetMockSurveyState } from "../api/mockSurveyApi";
 import { SurveyView } from "./SurveyView";
 
 describe("SurveyView", () => {
   beforeEach(() => {
+    vi.stubEnv("VITE_USE_MOCK_API", "true");
     resetMockSurveyState();
   });
 
   afterEach(() => {
     cleanup();
+    vi.unstubAllEnvs();
   });
 
   it("test_survey_view_when_loaded_then_displays_question_and_saves_answer", async () => {

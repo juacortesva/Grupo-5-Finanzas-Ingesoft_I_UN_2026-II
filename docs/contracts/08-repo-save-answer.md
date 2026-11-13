@@ -2,8 +2,8 @@
 
 | | |
 |---|---|
-| **Versión** | 1.1 (2026-11-12) — incorpora hallazgos F-01…F-21 de la auditoría de contratos |
-| **Estado** | Propuesto |
+| **Versión** | 1.2 (2026-11-12) — aprobado |
+| **Estado** | Aprobado |
 | **Trazabilidad** | `REQ-01` · AC-01.2 · `BR-03` · `02` §1.1 (mensaje `saveAnswer(surveyId, userId, answer)` hacia `SRepo`), §2.4 (fila `saveAnswer`), §2.5 · `01` §3.2 (`SurveyRepository.saveAnswer`) |
 | **Contratos relacionados** | Lo invoca CT-06 |
 
@@ -55,5 +55,7 @@
 ```
 
 ## 4. Notas de alineación con `01`
+
+> **Estado:** resuelto en `01` v1.2 y `02` v1.3 (2026-11-12). Se conserva como registro del cambio.
 
 * `01` §3.2 declara `saveAnswer(surveyId : UUID, userId : UUID, answer : Answer) void`; debería declarar `Boolean` para que la comprobación de estado bajo bloqueo llegue al servicio.

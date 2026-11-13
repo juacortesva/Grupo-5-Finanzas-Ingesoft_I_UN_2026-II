@@ -5,7 +5,7 @@
 | **Equipo** | Grupo 5 (`@KevinVerjan`, `@Estebandido-exe`, `@josuarezvi`, `@juacortesva`) |
 | **Ubicación** | `docs/estructura_repositorio.md` |
 | **Patrón de Organización** | Monorepo Políglota con **Backend y Frontend Modulares por Dominio y Capas Internas** |
-| **Referencias** | `docs/adr/adr-0001.md`..`adr-0006.md`, `docs/design/`, `docs/contracts/` |
+| **Referencias** | `docs/adr/adr-0001.md`..`adr-0007.md`, `docs/design/`, `docs/contracts/` |
 
 ---
 
@@ -24,7 +24,7 @@ Tanto en `backend/` como en `frontend/`, el código **no se agrupa en carpetas t
 
 ## 2. Árbol de Directorios del Repositorio
 
-El siguiente árbol define la jerarquía de carpetas y el patrón de cada módulo (sin listar archivos individuales que cambian con el tiempo):
+El siguiente árbol define la jerarquía de carpetas y el patrón real de cada módulo en el repositorio:
 
 ```text
 asesor-financiero/
@@ -37,7 +37,7 @@ asesor-financiero/
 │   ├── code_style.md                # Estándares de código y convenciones
 │   ├── estructura_repositorio.md    # Este documento (arquitectura de carpetas)
 │   ├── project_status.md            # Estado del proyecto y bitácora
-│   ├── adr/                         # Architecture Decision Records (adr-0001.md a adr-0006.md)
+│   ├── adr/                         # Architecture Decision Records (adr-0001.md a adr-0007.md)
 │   ├── req/                         # Especificación de Requerimientos (REQ-01.md)
 │   ├── design/                      # Entregables de Diseño Arquitectónico y de Datos
 │   ├── contracts/                   # Contratos de interfaz por operación (CT-01 a CT-12)
@@ -47,16 +47,20 @@ asesor-financiero/
 │   ├── Dockerfile                   # Imagen del servicio backend (FastAPI)
 │   ├── entrypoint.sh                # Arranque del contenedor: alembic upgrade head + uvicorn
 │   ├── pyproject.toml               # Dependencias y configuración de linters/pruebas
+│   ├── alembic.ini                  # Configuración de Alembic
 │   ├── alembic/                     # Migraciones de esquema sobre g1-team-5-db
-│   │   └── versions/                # (...) Archivos de migración autogenerados
+│   │   ├── env.py                   # Importa src.core.models, src.survey.models y src.categorization.models
+│   │   └── versions/                # (...) Archivos de migración versionados (0001_initial_schema.py)
+│   ├── scripts/
+│   │   └── seed_phase0.py           # Semilla idempotente con datos provisionales de calibración (Fase 0)
 │   ├── src/
 │   │   ├── main.py                  # Punto de entrada de FastAPI y registro de módulos
-│   │   ├── core/                    # Infraestructura transversal (BD, config, auth, excepciones)
+│   │   ├── core/                    # Infraestructura transversal (config.py, database.py, models.py, auth_deps.py, exceptions.py, schemas.py)
 │   │   │   └── ...
 │   │   │
 │   │   ├── <domain_module>/         # Plantilla estándar por cada Módulo de Negocio
 │   │   │   ├── router.py            # Capa HTTP (endpoints del módulo)
-│   │   │   ├── service.py           # Capa de Aplicación / Orquestación
+│   │   │   ├── service.py           # Capa de Aplicación / Orquestación + proveedor Depends del módulo
 │   │   │   ├── engine.py            # (Opcional) Reglas matemáticas o de dominio puro
 │   │   │   ├── repository.py        # Capa de Acceso a Datos (Interfaz + ORM)
 │   │   │   ├── models.py            # Entidades SQLAlchemy exclusivas del módulo
@@ -69,10 +73,11 @@ asesor-financiero/
 │   │   │   └── ...
 │   │   └── ...                      # Futuros módulos de dominio
 │   │
-│   └── tests/                       # Suite de pruebas automatizadas (Pytest)
-│       ├── unit/                    # Pruebas aisladas de dominio y servicios (sin BD)
+│   └── tests/                       # Suite de pruebas automatizadas por módulo de dominio (Pytest)
+│       ├── conftest.py              # Fixtures de sesión (PostgreSQL real vía TEST_DATABASE_URL o fallback SQLite)
+│       ├── survey/                  # Pruebas de contratos HTTP, repositorios e invariantes de survey
 │       │   └── ...
-│       └── integration/             # Pruebas de flujo completo (FastAPI + g1-team-5-db)
+│       └── categorization/          # Pruebas unitarias de ScoringEngine y resiliencia de CategorizationService
 │           └── ...
 │
 └── frontend/                        # Aplicación Web Cliente (React + Vite + TypeScript)
@@ -81,12 +86,13 @@ asesor-financiero/
     ├── package.json                 # Dependencias y scripts de cliente
     ├── tsconfig.json                # Configuración estricta de TypeScript
     └── src/
-        ├── api/                     # Cliente HTTP base y tipos autogenerados (OpenAPI)
+        ├── api/                     # Cliente HTTP base (httpClient.ts), healthService.ts y tipos OpenAPI
         │   ├── generated/           # (...) Contratos TypeScript exportados desde FastAPI
         │   └── ...
         │
         ├── features/                # Módulos funcionales de UI (espejo de los módulos backend)
         │   ├── <feature_module>/    # Plantilla estándar por cada Feature de UI
+        │   │   ├── api/             # (...) Puerto e implementaciones de adaptador API (HTTP real y mock)
         │   │   ├── components/      # (...) Componentes visuales propios del feature
         │   │   ├── hooks/           # (...) Custom hooks de estado y llamadas a la API
         │   │   ├── pages/           # (...) Vistas/pantallas completas del flujo
@@ -99,7 +105,7 @@ asesor-financiero/
         │   └── ...                  # Futuros features de UI
         │
         └── shared/                  # Recursos transversales reutilizables sin dominio propio
-            ├── components/          # (...) Botones, modales, alertas, spinners genéricos
+            ├── components/          # (...) Banners, alertas y controles genéricos
             └── utils/               # (...) Formateadores y funciones auxiliares puras
 ```
 

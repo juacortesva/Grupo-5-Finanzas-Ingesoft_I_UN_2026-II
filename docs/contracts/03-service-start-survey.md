@@ -2,8 +2,8 @@
 
 | | |
 |---|---|
-| **Versión** | 1.1 (2026-11-12) — incorpora hallazgos F-01…F-21 de la auditoría de contratos |
-| **Estado** | Propuesto |
+| **Versión** | 1.2 (2026-11-12) — aprobado tras cierre de bloqueante `question_option` |
+| **Estado** | Aprobado |
 | **Trazabilidad** | `REQ-01` · US-01 · AC-01.1, AC-01.2 · `BR-01`, `BR-02` · `02` §1.1, §2.4 (fila `startSurvey`) · `01` §3.2 (`SurveyManager.startSurvey(userId : UUID) Survey`) |
 | **Contratos relacionados** | Lo invoca CT-01; usa CT-04 (`findDraftByUserId`) y CT-05 (`save`) |
 
@@ -51,4 +51,6 @@
 
 ## 4. Notas de alineación con `01` / `02`
 
-* `01` §3.2 debería añadir a `Survey` los atributos `answers : List~Answer~` y `startedAt : DateTime`, y a `Question` los atributos `displayOrder : Integer`, `isRequired : Boolean` y `options : List~AnswerOption~`. Estos atributos ya existen en el modelo ER (`02` §2.2), salvo `options`, que es la dependencia abierta del catálogo de opciones (`02` §5).
+> **Estado:** resuelto en `01` v1.2 y `02` v1.3 (2026-11-12). Se conserva como registro del cambio.
+
+* `01` §3.2 debería añadir a `Survey` los atributos `answers : List~Answer~` y `startedAt : DateTime`, y a `Question` los atributos `displayOrder : Integer`, `isRequired : Boolean` y `options : List~AnswerOption~` (resuelto mediante `question_option` en `02` §2.2).

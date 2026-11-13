@@ -7,7 +7,21 @@ describe("healthService", () => {
     vi.restoreAllMocks();
   });
 
-  it("test_is_mock_api_enabled_when_env_not_false_then_returns_true", () => {
+  it("test_is_mock_api_enabled_when_env_unset_or_false_then_returns_false", () => {
+    // Arrange
+    vi.stubEnv("VITE_USE_MOCK_API", "");
+
+    // Act
+    const whenUnset = isMockApiEnabled();
+    vi.stubEnv("VITE_USE_MOCK_API", "false");
+    const whenFalse = isMockApiEnabled();
+
+    // Assert
+    expect(whenUnset).toBe(false);
+    expect(whenFalse).toBe(false);
+  });
+
+  it("test_is_mock_api_enabled_when_env_strictly_true_then_returns_true", () => {
     // Arrange
     vi.stubEnv("VITE_USE_MOCK_API", "true");
 
