@@ -2,8 +2,8 @@
 
 | | |
 |---|---|
-| **Versión** | 1.1 (2026-11-12) — incorpora hallazgos F-01…F-21 de la auditoría de contratos |
-| **Estado** | Propuesto |
+| **Versión** | 1.2 (2026-11-12) — aprobado |
+| **Estado** | Aprobado |
 | **Trazabilidad** | `REQ-01` · AC-01.1 · `BR-05` · NFR de precisión numérica · `02` §1.1 (`calculateScore`, `determineCategory`), §2.3 · `01` §3.2 (Diagrama A), §3.4 · `ADR-0001` |
 | **Contratos relacionados** | Lo invoca CT-10 |
 
@@ -63,5 +63,7 @@ Este archivo documenta **dos operaciones independientes** del motor de dominio e
 *Los valores de los umbrales son solo de ejemplo: los reales los definirá producto/finanzas (`REQ-01`, Dependencias).*
 
 ## 4. Notas de alineación con `01`
+
+> **Estado:** resuelto en `01` v1.2 y `02` v1.3 (2026-11-12). Se conserva como registro del cambio.
 
 * `01` §3.2 define `ScoringEngine.weightMatrix : Dict`. Como los pesos ya se persisten en `question.weight` y llegan dentro de cada `ScoredAnswerDTO`, ese atributo debería guardar **solo los umbrales** (por ejemplo, renombrarlo a `thresholds`). Así se evitan dos fuentes de verdad para los pesos (`02` §2.3, §6).

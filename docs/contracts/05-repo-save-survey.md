@@ -2,8 +2,8 @@
 
 | | |
 |---|---|
-| **Versión** | 1.1 (2026-11-12) — incorpora hallazgos F-01…F-21 de la auditoría de contratos |
-| **Estado** | Propuesto |
+| **Versión** | 1.2 (2026-11-12) — aprobado |
+| **Estado** | Aprobado |
 | **Trazabilidad** | `REQ-01` · AC-01.1 · `BR-02`, `BR-03` · `02` §1.1 (mensajes `save(new Survey en DRAFT)` y `save(survey COMPLETED)`), §2.4, §2.5 · `01` §3.2 (`SurveyRepository.save`) |
 | **Contratos relacionados** | Lo invocan CT-03 (caso A) y CT-09 (caso B) |
 
@@ -59,6 +59,8 @@
 ```
 
 ## 4. Notas de alineación con `01` / `02`
+
+> **Estado:** resuelto en `01` v1.2 y `02` v1.3 (2026-11-12). Se conserva como registro del cambio.
 
 * `01` §3.2 declara `save(survey : Survey) void`; debería declarar `Survey | null` para devolver el `surveyId` generado (que `02` §1.1 ya muestra como `persisted DRAFT`) y el resultado de la transición condicional.
 * Si el equipo prefiere mayor cohesión, este contrato puede dividirse en `createDraft` y `completeTransition` sin cambiar la semántica descrita.

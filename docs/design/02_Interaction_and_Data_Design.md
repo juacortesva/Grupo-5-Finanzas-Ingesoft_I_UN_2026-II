@@ -1,4 +1,4 @@
-# Asesor Financiero Personal — Interaction & Data Design v1.2
+# Asesor Financiero Personal — Interaction & Data Design v1.3
 
 | | |
 |---|---|
@@ -6,7 +6,7 @@
 | **Members** | Esteban David Suárez<br />Juan David Cortés<br />Joel Felipe Suárez<br />Kevin Facid Verjan |
 | **Status** | Definitive design baseline — open decisions documented in §5 |
 | **Date** | 2026-10-25 (aligned 2026-11-12) |
-| **Inputs** | `docs/design/01_Architectural_and_Detailed_Design.md` (v1.1), `docs/req/REQ-01.md`, `docs/adr/adr-0001.md`, Interaction & Contracts Design v0.1 (Class 13) |
+| **Inputs** | `docs/design/01_Architectural_and_Detailed_Design.md` (v1.2), `docs/req/REQ-01.md`, `docs/adr/adr-0001.md`, `docs/contracts/` (`CT-01`..`CT-12` v1.1), Interaction & Contracts Design v0.1 (Class 13) |
 
 ---
 
@@ -61,10 +61,18 @@ sequenceDiagram
             SMgr->>SMgr: validar status = DRAFT
             alt status = DRAFT
                 SMgr->>SRepo: saveAnswer(surveyId, userId, answer)
-                SRepo-->>SMgr: persisted
-                SMgr-->>SRouter: ok
-                SRouter-->>WebApp: ok
-                WebApp-->>Cliente: confirmación visual
+                Note right of SRepo: FOR UPDATE + re-verifica status = DRAFT
+                alt applied = true
+                    SRepo-->>SMgr: true
+                    SMgr-->>SRouter: ok
+                    SRouter-->>WebApp: 204 No Content
+                    WebApp-->>Cliente: confirmación visual
+                else applied = false (cierre concurrente)
+                    SRepo-->>SMgr: false
+                    SMgr-->>SRouter: InvalidStateError
+                    SRouter-->>WebApp: 409 Conflict
+                    WebApp-->>Cliente: encuesta ya cerrada
+                end
             else status = COMPLETED
                 SMgr-->>SRouter: InvalidStateError
                 SRouter-->>WebApp: 409 Conflict
@@ -86,19 +94,21 @@ sequenceDiagram
     SRepo-->>SMgr: Survey DRAFT con answers
     alt survey válida, DRAFT, respuestas completas
         SMgr->>SRepo: save(survey COMPLETED) [transacción]
-        Note right of SRepo: commit de COMPLETED antes de evaluar
-        SMgr->>CSvc: evaluateProfile(userId, surveyId, answers)
+        Note right of SRepo: UPDATE ... WHERE status = DRAFT<br/>commit de COMPLETED antes de evaluar<br/>0 filas → null → InvalidStateError (409)
+        SRepo-->>SMgr: Survey COMPLETED
+        SMgr->>SMgr: construir lista de ScoredAnswerDTO<br/>(answers persistidas + question.weight)
+        SMgr->>CSvc: evaluateProfile(userId, surveyId, scoredAnswers)
         CSvc->>SEng: calculateScore(answers)
         SEng-->>CSvc: totalScore
         CSvc->>SEng: determineCategory(totalScore)
         SEng-->>CSvc: assignedCategory
         alt cálculo y persistencia exitosos
-            CSvc->>PRepo: saveCategory(userId, surveyId, category, COMPLETED)
+            CSvc->>PRepo: saveCategory(userId, ProfileEvaluation(surveyId, category, COMPLETED, totalScore))
             PRepo-->>CSvc: persisted
             CSvc-->>SMgr: EvaluationResult COMPLETED
         else fallo del motor o de la persistencia de la categoría definitiva
             CSvc->>CSvc: logError(errorType, operation, timestamp)
-            CSvc->>PRepo: saveCategory(userId, surveyId, UNDER_EVALUATION, ERROR)
+            CSvc->>PRepo: saveCategory(userId, ProfileEvaluation(surveyId, UNDER_EVALUATION, ERROR, null))
             alt persistencia provisional exitosa
                 PRepo-->>CSvc: persisted provisional
                 CSvc-->>SMgr: EvaluationResult ERROR
@@ -131,7 +141,7 @@ sequenceDiagram
 | Main flow, paso 2: carga del catálogo | `questions` en el output de `startSurvey` | catálogo de `question` (`BR-01`) | `SurveyManager.startSurvey` (output `Survey` incluye `questions`) |
 | Main flow, paso 3 (progresivo): captura de cada respuesta | `saveAnswer`, `findById`, `saveAnswer` | `surveyId`, `userId`, `answer` individual; `SurveyManager` valida estado `DRAFT` y reglas antes de persistir | `SurveyManager.saveAnswer`, `SurveyRepository.findById`, `SurveyRepository.saveAnswer` |
 | Main flow, paso 4–5: envío y evaluación (incluye `BR-03`, `BR-05`) | `completeSurvey`, `evaluateProfile`, `calculateScore`, `determineCategory` | `userId`, `surveyId`, `answers`, `totalScore`, categoría | `SurveyManager.completeSurvey`, `CategorizationService.evaluateProfile`, `ScoringEngine.calculateScore`, `ScoringEngine.determineCategory` |
-| Main flow, paso 6: persistencia exitosa (`BR-04`) | `saveCategory` con `COMPLETED` | categoría, `totalScore`, estado `COMPLETED` | `ProfileRepository.saveCategory` |
+| Main flow, paso 6: persistencia exitosa (`BR-04`) | `saveCategory` con `ProfileEvaluation(..., COMPLETED, totalScore)` | categoría, `totalScore`, `evaluationStatus = COMPLETED` | `ProfileRepository.saveCategory` (`CT-12`) |
 | Exception flow (Escenario 3 `REQ-01`, `BR-06`): fallo del motor | `logError`, `saveCategory` con `UNDER_EVALUATION`/`ERROR` | `errorType`, `operation`, `timestamp` (sin datos sensibles); perfil provisional si su persistencia tiene éxito | `CategorizationService.evaluateProfile` (bloque de excepción de §3.4 del `01`) |
 | Alternative rechazada: envío inválido o estado no `DRAFT` | `else survey inválida` | `NotFoundError`, `InvalidStateError`, `ValidationError` | `completeSurvey` / precondiciones de `evaluateProfile` |
 
@@ -271,6 +281,7 @@ erDiagram
     client ||--o{ survey : owns
     client ||--o| financial_profile : has
     survey ||--o{ answer : records
+    question ||--|{ question_option : offers
     question ||--o{ answer : is answered as
     survey ||--o| financial_profile : originates
 
@@ -295,6 +306,13 @@ erDiagram
         boolean is_required
         boolean is_active
     }
+    question_option {
+        int id PK
+        int question_id FK
+        int option_number
+        string text
+        decimal value
+    }
     answer {
         uuid answer_id PK
         uuid survey_id FK
@@ -318,7 +336,8 @@ erDiagram
 | `client` | Persona autenticada dueña de encuestas y del perfil de inicio | `client_id` | `email` obligatorio y único. No hay clase `Client` en los diagramas del `01`: se persiste como identidad referenciada por `userId` (`user_id` en Python). |
 | `survey` | Una ejecución del cuestionario de onboarding | `survey_id` | `status` ∈ {`DRAFT`, `COMPLETED`}. **`ERROR` no es un estado de encuesta.** `completed_at` solo si `status = COMPLETED`. A lo sumo un `DRAFT` por `client_id` (`BR-02`). Una vez en `COMPLETED`, no vuelve a `DRAFT` ni acepta `saveAnswer` (`BR-03`). |
 | `question` | Pregunta parametrizada del cuestionario breve | `question_id` | `text` y `weight` obligatorios. `weight` ≥ 0 con tipo `NUMERIC`. `display_order` único dentro del catálogo activo. `is_active` indica si integra el cuestionario vigente. A lo sumo 10 preguntas activas (`BR-01`). |
-| `answer` | Opción elegida por el cliente en una pregunta de una encuesta | `answer_id` | Par (`survey_id`, `question_id`) único. `selected_option` entero positivo y válido para la pregunta según el catálogo de opciones acordado; `option_value` `NUMERIC` no nulo, resuelto por el backend a partir de esa opción. Se inserta o actualiza vía `saveAnswer` por transacción independiente. |
+| `question_option` | Opción de respuesta parametrizada para una pregunta | `id` | `question_id` FK obligatorio hacia `question.question_id` (`ON DELETE CASCADE`). Par (`question_id`, `option_number`) único. `option_number` entero positivo (`> 0`). `text` obligatorio. `value` `NUMERIC` obligatorio (usado solo en backend para calcular puntaje; nunca expuesto al cliente web). |
+| `answer` | Opción elegida por el cliente en una pregunta de una encuesta | `answer_id` | Par (`survey_id`, `question_id`) único. `selected_option` entero positivo que debe corresponder a un `option_number` válido en `question_option` para ese `question_id`; `option_value` `NUMERIC` no nulo, copiado por el backend desde `question_option.value`. Se inserta o actualiza vía `saveAnswer` por transacción independiente. |
 | `financial_profile` | Categoría de inicio vigente del cliente (`BR-04`) | `profile_id` | `client_id` único. `assigned_category` ∈ {`CONSERVATIVE`, `MODERATE`, `AGGRESSIVE`, `UNDER_EVALUATION`}. `evaluation_status` ∈ {`COMPLETED`, `ERROR`}. Si `ERROR`, categoría = `UNDER_EVALUATION` y `total_score` nulo (`BR-06`). `survey_id` obligatorio (qué encuesta produjo el perfil). |
 
 ### 2.3 Data Ownership
@@ -328,7 +347,7 @@ Ningún componente lee ni escribe tablas de otro. PostgreSQL es el almacén, no 
 | Information | Authoritative owner (component responsible for maintaining it) | Consumed by (uses it without owning it) | Access through |
 |---|---|---|---|
 | Encuesta, estado y respuestas | Survey Module (`SurveyManager` + `SurveyRepository`) | Categorization Module (solo el conjunto de `answers` al evaluar) | `startSurvey`, `saveAnswer`, `resumeSurvey`, `completeSurvey`, `SurveyRepository` |
-| Catálogo de preguntas y pesos | Survey Module (`SurveyRepository`) | `ScoringEngine` (consume valores ya resueltos en `Answer.getValue()`, no consulta SQL) | carga de encuesta en el output de `startSurvey` y `resumeSurvey` |
+| Catálogo de preguntas, opciones y pesos | Survey Module (`SurveyRepository`) | `ScoringEngine` (consume `optionValue` y `weight` ya resueltos en `ScoredAnswerDTO`, no consulta SQL) | carga de encuesta en el output de `startSurvey` y `resumeSurvey` |
 | Perfil financiero (categoría, estado de evaluación, puntaje) | Categorization Module (`CategorizationService` + `ProfileRepository`) | Web App (solo para mostrar confirmación y panel) | `evaluateProfile`, `ProfileRepository.saveCategory` / `findByUserId` |
 | Identidad `client` / `userId` | **Fuera del alcance detallado** (módulo de autenticación no diseñado en Entrega 1) | Survey Module y Categorization Module (FK + parámetro inyectado; nunca actualizan email ni credenciales) | Dependencia de FastAPI `getCurrentUser()` (`get_current_user` en Python); parámetro `userId` en las operaciones de servicio y repositorio. **Nunca se lee de `request.body`.** |
 | Matriz y umbrales `BR-05` | `ScoringEngine` (conocimiento interno, no fila persistida) | `CategorizationService` | `calculateScore`, `determineCategory` |
@@ -341,8 +360,8 @@ Las restricciones de integridad de PostgreSQL se complementan con transacciones 
 | Operation | Concurrency strategy | Expected behavior |
 |---|---|---|
 | `startSurvey(userId)` | Insertar el `DRAFT` dentro de una transacción, respaldado por el índice único parcial `(client_id) WHERE status = 'DRAFT'`. Ante conflicto de unicidad, consultar y devolver el borrador que ganó la carrera. | Dos peticiones simultáneas no crean dos borradores; ambas obtienen el mismo `DRAFT`. |
-| `saveAnswer(surveyId, userId, answer)` | `SurveyManager` valida ownership, estado `DRAFT` y validez en catálogo antes de persistir; `SurveyRepository` ejecuta la operación en transacción bloqueando la fila `survey` (`SELECT ... FOR UPDATE` o equivalente) con filtro `WHERE client_id = :userId` y hace el upsert de `answer`. | La comprobación de ownership/estado y la escritura quedan serializadas respecto a `completeSurvey`. |
-| `completeSurvey(surveyId, userId)` | `SurveyManager` coordina la validación de ownership, estado `DRAFT` y respuestas obligatorias, mientras `SurveyRepository` bloquea la fila `survey` en transacción (`WHERE client_id = :userId`), actualiza a `COMPLETED` y fija `completed_at` antes de confirmar e invocar la evaluación. | Una respuesta concurrente se guarda antes de completar o es rechazada después; no hay escrituras tardías sobre una encuesta cerrada. |
+| `saveAnswer(surveyId, userId, answer)` | `SurveyManager` valida ownership, estado `DRAFT` y validez en catálogo con `findById` (lectura sin bloqueo). `SurveyRepository.saveAnswer` bloquea la fila con `SELECT ... WHERE survey_id = :surveyId AND client_id = :userId AND status = 'DRAFT' FOR UPDATE`, **re-verificando el estado bajo el bloqueo**, y hace el upsert de `answer`; si no hay fila devuelve `false` sin escribir (`CT-08`). | La comprobación definitiva de estado y la escritura quedan serializadas respecto a `completeSurvey`; `false` se traduce a `InvalidStateError` (409). |
+| `completeSurvey(surveyId, userId)` | `SurveyManager` valida ownership, estado `DRAFT` y respuestas obligatorias; `SurveyRepository.save` ejecuta la transición condicional `UPDATE survey SET status = 'COMPLETED', completed_at = :now WHERE survey_id = :surveyId AND client_id = :userId AND status = 'DRAFT'` y confirma antes de invocar la evaluación; con 0 filas devuelve `null` (`CT-05`). | Una respuesta concurrente se guarda antes de completar o es rechazada después; dos cierres concurrentes no sobrescriben `completed_at` ni evalúan dos veces (el perdedor recibe 409). |
 
 La evaluación se ejecuta después de confirmar la transición a `COMPLETED`. Un fallo de evaluación no revierte la encuesta a `DRAFT`. La estrategia concreta de aislamiento y manejo de excepciones se implementa con PostgreSQL; no requiere un componente ni infraestructura adicional.
 
@@ -355,7 +374,7 @@ La evaluación se ejecuta después de confirmar la transición a `COMPLETED`. Un
 | **`BR-03`** — completitud e inmutabilidad al cierre (`COMPLETED`) | Both | Lógica: `SurveyManager.completeSurvey` exige respuestas en todas las `question` obligatorias y `SurveyManager.saveAnswer` rechaza si `status ≠ DRAFT`. Datos: `completed_at` inmutable una vez fijado. |
 | **`BR-04`** — categoría única vigente por cliente | Both | Lógica: `CategorizationService.evaluateProfile` deja un único perfil vigente vinculado a `survey_id`. Datos: `client_id` único y `assigned_category` obligatorio en `financial_profile`. |
 | **`BR-05`** — desempate conservador en el umbral (`<=`) | Component logic | Solo `ScoringEngine.determineCategory`. No hay columna "empate": el resultado ya es la categoría conservadora. |
-| **`BR-06`** — asignación provisional ante fallo de evaluación | Both | Lógica: `CategorizationService.evaluateProfile` ante falla llama `saveCategory(..., UNDER_EVALUATION, ERROR)` con `totalScore = null` sin reabrir `survey`. Datos: coherencia entre categoría, estado `ERROR` y puntaje nulo en `financial_profile`. |
+| **`BR-06`** — asignación provisional ante fallo de evaluación | Both | Lógica: `CategorizationService.evaluateProfile` ante falla llama `saveCategory(userId, ProfileEvaluation(surveyId, UNDER_EVALUATION, ERROR, null))` sin reabrir `survey`. Datos: coherencia entre categoría, estado `ERROR` y puntaje nulo en `financial_profile`, reforzable con una restricción `CHECK` (`CT-12`). |
 | Toda operación de lectura o escritura sobre `survey` y `financial_profile` filtra por `userId` | Both | Lógica: `SurveyManager` y `CategorizationService` reciben `userId` del contexto de autenticación. Datos: query con `WHERE client_id = :userId`. |
 | `survey.status` no contiene `ERROR` | Data | El enum del `01` §3.2 define solo `{DRAFT, COMPLETED}`. El error vive en `financial_profile.evaluation_status`. |
 | Una respuesta por pregunta y encuesta | Data | Unique (`survey_id`, `question_id`) en `answer`. `saveAnswer` hace upsert y valida la opción. |
@@ -376,20 +395,20 @@ La evaluación se ejecuta después de confirmar la transición a `COMPLETED`. Un
 | Element | Specification |
 |---|---|
 | **Operation and purpose** | `evaluateProfile(userId, surveyId, answers)`: calcular la categoría de inicio del cliente a partir de las respuestas de una encuesta ya enviada y dejar el perfil persistido. Si el cálculo o la persistencia de la categoría definitiva fallan, intenta dejar una categoría provisional; solo puede garantizarlo si la escritura provisional tiene éxito. |
-| **Input** (parameters and types) | `userId`: UUID no nulo del cliente autenticado. `surveyId`: UUID no nulo de la encuesta enviada. `answers`: lista no vacía de `Answer` (`questionId: int`, `selectedOption: int`, `optionValue: Decimal`). |
-| **Output** (successful result and data structure) | `EvaluationResult { surveyId: UUID, assignedCategory: FinancialCategory, totalScore: Decimal \| null, status: string }`. En éxito de cálculo: `status = COMPLETED`, `assignedCategory` ∈ {`CONSERVATIVE`, `MODERATE`, `AGGRESSIVE`}, `totalScore` no nulo. |
+| **Input** (parameters and types) | `userId`: UUID no nulo del cliente autenticado. `surveyId`: UUID no nulo de la encuesta enviada. `answers`: lista no vacía de `ScoredAnswerDTO` (`questionId: int`, `optionValue: Decimal`, `weight: Decimal ≥ 0`), construida por `SurveyManager` desde las respuestas persistidas y `question.weight`. |
+| **Output** (successful result and data structure) | `EvaluationResult { surveyId: UUID, assignedCategory: FinancialCategory, evaluationStatus: EvaluationStatus, totalScore: Decimal \| null }`. En éxito de cálculo: `evaluationStatus = COMPLETED`, `assignedCategory` ∈ {`CONSERVATIVE`, `MODERATE`, `AGGRESSIVE`}, `totalScore` no nulo. Invariante: `evaluationStatus = ERROR` ⇔ `assignedCategory = UNDER_EVALUATION` ⇔ `totalScore = null`. |
 | **Preconditions** (what the caller must satisfy before invoking) | El llamador (`SurveyManager`) ya validó ownership, estado `DRAFT` y respuestas obligatorias dentro de la transacción de finalización; la transición a `COMPLETED` (`BR-03`) se confirma antes de invocar este servicio. `userId` corresponde al dueño de `surveyId`. `answers` no está vacía. El catálogo usado para responder sigue siendo el vigente (no hay versionado — supuesto). |
 | **Postconditions** (what is guaranteed on successful completion) | Existe exactamente un `financial_profile` para `userId` (`BR-04`). `assigned_category` y `evaluation_status` coinciden con el `EvaluationResult` devuelto. `survey_id` del perfil es el de esta invocación. `BR-05` ya está aplicada. |
-| **Failure outcomes** (each failure, and what state is left after it) | `InvalidInputError` (`answers` vacía): no se llama a `saveCategory`; el perfil no cambia. La validación ocurre antes de cambiar `survey.status` a `COMPLETED` (el diagrama 1.1 rechaza antes). Fallo de cálculo o de persistencia de la categoría definitiva: se registra un log sanitizado y se intenta `saveCategory(userId, surveyId, UNDER_EVALUATION, ERROR)` (`BR-06`). Si la escritura provisional tiene éxito, se devuelve `EvaluationResult` con `status = ERROR`, categoría `UNDER_EVALUATION` y `totalScore = null`. Si también falla, se propaga `EvaluationPersistenceError`; no se garantiza que exista un perfil actualizado ni que `BR-04` pueda satisfacerse. La llamada a `logError(errorType, operation, timestamp)` **no incluye** respuestas, puntajes ni datos personales. La falla de la persistencia provisional se trata como `EvaluationPersistenceError` y queda registrada como pregunta abierta (§5); no se inventa una cola de reintentos (`ADR-0001` rechazó brokers). En ningún caso se altera el contenido de `answer`. |
+| **Failure outcomes** (each failure, and what state is left after it) | `InvalidInputError` (`answers` vacía): no se llama a `saveCategory`; el perfil no cambia. La validación ocurre antes de cambiar `survey.status` a `COMPLETED` (el diagrama 1.1 rechaza antes). Fallo de cálculo o de persistencia de la categoría definitiva: se registra un log sanitizado y se intenta `saveCategory(userId, ProfileEvaluation(surveyId, UNDER_EVALUATION, ERROR, null))` (`BR-06`). Si la escritura provisional tiene éxito, se devuelve `EvaluationResult` con `evaluationStatus = ERROR`, categoría `UNDER_EVALUATION` y `totalScore = null`. Si también falla, se propaga `EvaluationPersistenceError`; no se garantiza que exista un perfil actualizado ni que `BR-04` pueda satisfacerse. La llamada a `logError(errorType, operation, timestamp)` **no incluye** respuestas, puntajes ni datos personales. La falla de la persistencia provisional se trata como `EvaluationPersistenceError` y queda registrada como pregunta abierta (§5); no se inventa una cola de reintentos (`ADR-0001` rechazó brokers). En ningún caso se altera el contenido de `answer`. |
 | **Invariants and side effects** (what must stay true, what may change) | No se reescriben respuestas. No se crea un segundo perfil para el mismo `userId` (upsert). `ScoringEngine` no persiste. La operación no es idempotente en el puntaje si el catálogo de pesos cambia entre llamadas, pero sí deja un único perfil vigente. Efecto de lado: escritura en `financial_profile`. |
 
 **Testable examples**
 
 | Case | Before | Request | Expected |
 |---|---|---|---|
-| Cálculo exitoso (Escenario 1) | Encuesta `COMPLETED` con 10 respuestas. Sin perfil, o perfil previo irrelevante. | `evaluateProfile(U1, S1, answers[10])` con puntaje interior a una banda | `EvaluationResult(S1, categoría de esa banda, totalScore, COMPLETED)`. Una fila de perfil para `U1`. |
-| Empate en umbral (`BR-05`) | Igual, puntaje exactamente en el límite entre Moderado y Conservador | `evaluateProfile(U1, S1, answers)` | `assignedCategory = CONSERVATIVE` (menor riesgo), `status = COMPLETED`. |
-| Falla del motor (Escenario 3) | Encuesta `COMPLETED`. `ScoringEngine` o `saveCategory` de éxito lanzan error | `evaluateProfile(U1, S1, answers)` | `EvaluationResult(S1, UNDER_EVALUATION, null, ERROR)`. Perfil provisional persistido. En este caso, y solo en este caso, el cliente puede continuar al panel. Si también falla esa escritura, se produce `EvaluationPersistenceError`, no se garantiza el perfil y el acceso al panel debe resolverse según la decisión pendiente de §5. |
+| Cálculo exitoso (Escenario 1) | Encuesta `COMPLETED` con 10 respuestas. Sin perfil, o perfil previo irrelevante. | `evaluateProfile(U1, S1, answers[10])` con puntaje interior a una banda | `EvaluationResult(S1, categoría de esa banda, COMPLETED, totalScore)`. Una fila de perfil para `U1`. |
+| Empate en umbral (`BR-05`) | Igual, puntaje exactamente en el límite entre Moderado y Conservador | `evaluateProfile(U1, S1, answers)` | `assignedCategory = CONSERVATIVE` (menor riesgo), `evaluationStatus = COMPLETED`. |
+| Falla del motor (Escenario 3) | Encuesta `COMPLETED`. `ScoringEngine` o `saveCategory` de éxito lanzan error | `evaluateProfile(U1, S1, answers)` | `EvaluationResult(S1, UNDER_EVALUATION, ERROR, null)`. Perfil provisional persistido. En este caso, y solo en este caso, el cliente puede continuar al panel. Si también falla esa escritura, se produce `EvaluationPersistenceError`, no se garantiza el perfil y el acceso al panel debe resolverse según la decisión pendiente de §5. |
 | Entrada inválida | Cualquiera | `evaluateProfile(U1, S1, [])` | `InvalidInputError`. Perfil intacto. |
 | Reevaluación posterior | Perfil `COMPLETED` de encuesta `S0` | `evaluateProfile(U1, S2, answers')` | Un solo perfil de `U1`, ahora con `survey_id = S2` y nueva categoría. `S0` permanece en historial de encuestas. |
 
@@ -397,17 +416,17 @@ Los umbrales numéricos exactos de cada banda **no** están en `REQ-01`. Los eje
 
 ### 3.2 Resumen de contratos del Survey Module
 
-Las operaciones del Survey Module se documentan aquí con la misma disciplina que `evaluateProfile`, pero en formato compacto porque son operaciones CRUD con invariantes sencillas.
+Las operaciones del Survey Module se documentan aquí con la misma disciplina que `evaluateProfile`, pero en formato compacto porque son operaciones CRUD con invariantes sencillas. **El detalle completo de cada operación (precondiciones, validaciones, invariantes, resultados de fallo y OpenAPI) está en `docs/contracts/` (`CT-01`..`CT-12`); esta tabla es su resumen.**
 
 | Operation | Input | Output | Preconditions | Postconditions | Failure outcomes |
 |---|---|---|---|---|---|
-| `startSurvey(userId)` | `userId`: UUID del contexto autenticado | `Survey` en `DRAFT` con `questions` cargadas | `userId` autenticado. | Existe exactamente un `DRAFT` para `userId` (idempotente: si ya existía, se devuelve el existente). Si no existía, se crea con `started_at = now()`. | `UnauthorizedError` (401) si el token no es válido. |
-| `saveAnswer(surveyId, userId, answer)` | `surveyId`: UUID. `userId`: UUID del contexto autenticado. `answer`: `{ questionId, selectedOption }`; el backend valida la opción para esa pregunta y resuelve `optionValue: Decimal`. | `void` (o `ok`). | Existe `survey` con `survey_id = surveyId` **y** `client_id = userId`, **y** `status = DRAFT`. `questionId` existe en el catálogo vigente. | La fila `answer` para (`surveyId`, `questionId`) queda insertada o actualizada. `survey.updated_at` se actualiza. | `NotFoundError` (404) si la encuesta no existe o no pertenece al `userId`. `InvalidStateError` (409) si `status = COMPLETED`. `ValidationError` (422) si `questionId` no existe en el catálogo. **En todos los casos, sin alterar datos existentes.** |
+| `startSurvey(userId)` (`CT-01`, `CT-03`) | `userId`: UUID del contexto autenticado | `Survey` en `DRAFT` con `questions` (1..10, con `options`, `isRequired`, `displayOrder`) y `answers` cargadas. Hacia la `Web App` no se exponen `weight` ni `optionValue`. | `userId` autenticado. | Existe exactamente un `DRAFT` para `userId` (idempotente: si ya existía, se devuelve el existente). Si no existía, se crea con `started_at = now()`. | `UnauthorizedError` (401) si el token no es válido. Catálogo activo vacío o con más de 10 preguntas → error técnico (500 genérico). |
+| `saveAnswer(surveyId, userId, answer)` (`CT-06`, `CT-08`) | `surveyId`: UUID. `userId`: UUID del contexto autenticado. `answer`: `{ questionId, selectedOption }`; el backend valida la opción para esa pregunta y resuelve `optionValue: Decimal` desde el catálogo. | `void` (HTTP 204). | `userId` autenticado. *(Existencia, propiedad, estado `DRAFT` y validez de pregunta/opción son validaciones del proveedor, no precondiciones.)* | La fila `answer` para (`surveyId`, `questionId`) queda insertada o actualizada. `survey.updated_at` se actualiza. | `NotFoundError` (404) si la encuesta no existe o no pertenece al `userId`. `InvalidStateError` (409) si `status = COMPLETED`, incluido un cierre concurrente detectado bajo bloqueo. `ValidationError` (422) si `questionId` no existe/está inactiva o `selectedOption` no pertenece a la pregunta. **En todos los casos, sin alterar datos existentes.** |
 | `resumeSurvey(userId)` | `userId`: UUID del contexto autenticado. | `Survey DRAFT \| null` con `answers` y `questions` cargadas. | `userId` autenticado. | Devuelve el `DRAFT` del usuario (con todas las `answer` persistidas) o `null` si no existe. No modifica estado. | `UnauthorizedError` (401) si el token no es válido. |
-| `completeSurvey(surveyId, userId)` | `surveyId`: UUID. `userId`: UUID del contexto autenticado. | `EvaluationResult` (delegado de `evaluateProfile`). | Existe `survey` con `survey_id = surveyId` **y** `client_id = userId`, **y** `status = DRAFT`, **y** todas las `question` obligatorias tienen `answer`. | `survey.status = COMPLETED` y `completed_at = now()`. Se invoca `evaluateProfile(userId, surveyId, answers)`. Devuelve su `EvaluationResult`. | `NotFoundError` (404) si la encuesta no existe o no es del `userId`. `InvalidStateError` (409) si ya está `COMPLETED`. Si el cliente perdió la respuesta HTTP de una finalización exitosa, debe poder consultar el estado de la encuesta y el perfil vigente para recuperar el resultado; la operación de consulta concreta de la API queda por definir. `ValidationError` (422) si faltan respuestas obligatorias. |
-| `findById(surveyId, userId)` | `surveyId`: UUID. `userId`: UUID del contexto autenticado. | `Survey (DRAFT o COMPLETED) \| null`. | — | Devuelve la encuesta, sea `DRAFT` o `COMPLETED`, **solo** si `client_id = userId`. No modifica estado. | Ningún error explícito: devuelve `null` cuando no existe o no es del `userId`. El Router traduce `null` a 404 (nunca 403, para no filtrar existencia). |
+| `completeSurvey(surveyId, userId)` (`CT-09`) | `surveyId`: UUID. `userId`: UUID del contexto autenticado. | `EvaluationResult` (delegado de `evaluateProfile`); HTTP 200 también con `evaluationStatus = ERROR` (`BR-06`); `totalScore` viaja como `string \| null`. | `userId` autenticado. *(Existencia, propiedad, estado `DRAFT` y respuestas obligatorias son validaciones del proveedor.)* | `survey.status = COMPLETED` y `completed_at = now()` mediante transición condicional. Se invoca `evaluateProfile(userId, surveyId, scoredAnswers)`. Devuelve su `EvaluationResult`. | `NotFoundError` (404) si la encuesta no existe o no es del `userId`. `InvalidStateError` (409) si ya está `COMPLETED`, incluido un cierre concurrente. `EvaluationPersistenceError` (503 propuesto, pendiente de stakeholder) ante fallo doble. Si el cliente perdió la respuesta HTTP de una finalización exitosa, debe poder consultar el estado de la encuesta y el perfil vigente para recuperar el resultado; la operación de consulta concreta de la API queda por definir. `ValidationError` (422) si faltan respuestas obligatorias. |
+| `findById(surveyId, userId)` (`CT-07`) | `surveyId`: UUID. `userId`: UUID del contexto autenticado. | `Survey (DRAFT o COMPLETED) \| null`. | — | Devuelve la encuesta, sea `DRAFT` o `COMPLETED`, **solo** si `client_id = userId`. No modifica estado. | Ningún error explícito: devuelve `null` cuando no existe o no es del `userId`. El Router traduce `null` a 404 (nunca 403, para no filtrar existencia). |
 
-**Nota de atomicidad:** `saveAnswer` y la transición de `completeSurvey` validan ownership/estado y escriben dentro de transacciones con bloqueo de la fila `survey`, según §2.4. La evaluación se invoca después del commit de `COMPLETED`.
+**Nota de atomicidad:** `findById` es una lectura sin bloqueo; la garantía definitiva de `BR-03` la dan las escrituras. `SurveyRepository.saveAnswer` re-verifica `status = DRAFT` bajo `FOR UPDATE` y devuelve `false` si no escribe; `SurveyRepository.save` cierra con `UPDATE … WHERE status = 'DRAFT'` y devuelve `null` con 0 filas (§2.4, `CT-05`, `CT-08`). La evaluación se invoca después del commit de `COMPLETED`.
 
 **Nota sobre el nivel de detalle:** `evaluateProfile` merece el contrato completo por su centralidad (`BR-04`, `BR-05`, `BR-06`, precisión decimal, Escenario 3). Las operaciones del Survey Module son CRUD con invariantes claras; el formato compacto cubre lo necesario para trazabilidad sin duplicar la prosa.
 
@@ -419,7 +438,7 @@ Las operaciones del Survey Module se documentan aquí con la misma disciplina qu
 |---|---|
 | Every participant in a sequence diagram is an actor, a component, a class, an external system or an explicit authentication dependency from Deliverable 1 | Cumple. `Cliente` es el actor (2.1). `Web App`, `SurveyRouter`, `SurveyRepository`, `ProfileRepository` son componentes (2.2). `SurveyManager`, `CategorizationService`, `ScoringEngine` son clases (3.2). `Auth Dependency` es una **dependencia de FastAPI** (`getCurrentUser` / `Depends(get_current_user)`), no un componente del sistema. No hay sistemas externos: `REQ-01` lo prohíbe. |
 | Every message corresponds to a capability, operation or contract | Cumple. `startSurvey`, `saveAnswer`, `resumeSurvey`, `completeSurvey`, `evaluateProfile`, `calculateScore`, `determineCategory`, `findById`, `findDraftByUserId`, `save`, `saveCategory`, `findByUserId` están en el `01` actualizado. Las acciones del cliente son disparadores de UI, no operaciones internas. `getCurrentUser` (`get_current_user` en Python) es la dependencia de autenticación. |
-| Every entity or document type is reflected in the class diagrams, or the reason it is not is stated | `survey`, `question`, `answer` ↔ clases `Survey`, `Question`, `Answer`. `financial_profile` ↔ `EvaluationResult` + `FinancialCategory` + `FinancialProfile` + `ProfileRepository`. `client` no tiene clase: la Entrega 1 no diseñó autenticación; solo viaja como `userId` inyectado. |
+| Every entity or document type is reflected in the class diagrams, or the reason it is not is stated | `survey`, `question`, `question_option`, `answer` ↔ clases `Survey`, `Question`, `AnswerOption`, `Answer`. `financial_profile` ↔ `EvaluationResult` + `ProfileEvaluation` + `FinancialCategory` + `EvaluationStatus` + `FinancialProfile` + `ProfileRepository`. `client` no tiene clase: la Entrega 1 no diseñó autenticación; solo viaja como `userId` inyectado. |
 | Every persisted information element has exactly one authoritative owner | Cumple (§2.3). `client`/`userId` se declara fuera de los módulos seleccionados; no se duplica la propiedad. |
 | The contract agrees with the sequence diagram and with the data model (same behavior in all three views) | Cumple. Los tres escenarios de §1.1 (éxito, error, inválido) son los resultados `COMPLETED`, `ERROR` e `InvalidInputError`/`InvalidStateError` del contrato. §1.2 se corresponde con `resumeSurvey` y `findDraftByUserId`. §1.3 se corresponde con la traducción `null → 404` de `findById`. `answers` vacías se rechazan antes de `evaluateProfile`, sin categoría inventada. |
 
@@ -433,6 +452,14 @@ Las operaciones del Survey Module se documentan aquí con la misma disciplina qu
 > 4. **Firmas con `userId` en `SurveyRepository` y `SurveyManager`:** `findById(surveyId, userId)`, `saveAnswer(surveyId, userId, answer)`, `completeSurvey(surveyId, userId)`. Esto materializa el filtro de ownership en el contrato, no solo en la prosa.
 > 5. **Separación de responsabilidades entre `SurveyManager` y `SurveyRepository` (`01` §3.3):** `SurveyManager` valida estado (`DRAFT`) y reglas de negocio, mientras `SurveyRepository` ejecuta la persistencia de `saveAnswer` y el filtro `WHERE client_id = :userId` en `findById`, cumpliendo `docs/estructura_repositorio.md`.
 >
+> **Cambios adicionales en `01` v1.2 (2026-11-12), derivados de la auditoría de los contratos `CT-01`..`CT-12` (`docs/contracts/`):**
+>
+> 6. **Enum `EvaluationStatus { COMPLETED, ERROR }`:** reemplaza `status : String` en `EvaluationResult` y `FinancialProfile` (`evaluationStatus`); `totalScore` pasa a `Optional~Decimal~` con el invariante `ERROR` ⇔ `UNDER_EVALUATION` ⇔ puntaje nulo (`BR-06`).
+> 7. **`ProfileRepository.saveCategory(userId, evaluation : ProfileEvaluation) FinancialProfile`:** la firma anterior no guardaba `total_score`; el DTO respeta el máximo de 4 parámetros de `docs/code_style.md`.
+> 8. **`ScoredAnswerDTO` en la frontera entre módulos:** `evaluateProfile` y `calculateScore` reciben `List~ScoredAnswerDTO~` (`questionId`, `optionValue`, `weight`); `ScoringEngine.weightMatrix` se sustituye por los umbrales `conservativeThreshold`/`moderateThreshold`, dejando `question.weight` como única fuente de pesos.
+> 9. **Retornos en `SurveyRepository`:** `findById`/`findDraftByUserId` → `Optional~Survey~`; `save` → `Optional~Survey~` (transición condicional); `saveAnswer` → `Boolean` (re-verificación de `DRAFT` bajo bloqueo).
+> 10. **Atributos de dominio:** `Survey.startedAt`, `completedAt`, `answers`; `Question.displayOrder`, `isRequired`, `options`; nueva clase `AnswerOption`; `Answer.optionValue`.
+>
 > No se añadió un módulo de autenticación: `Auth Dependency` es una dependencia de FastAPI (`Depends(get_current_user)`), no un componente del sistema. No se añadió broker de reintentos: [`ADR-0001`](../adr/adr-0001.md) lo rechazó y el fallo doble queda registrado en §5.
 
 ---
@@ -441,7 +468,7 @@ Las operaciones del Survey Module se documentan aquí con la misma disciplina qu
 
 > **Umbrales numéricos de categoría.** `REQ-01` y `BR-05` definen el desempate en el límite, pero no los valores de cada banda. No se inventan cortes. Hasta que producto/finanzas entregue la matriz, `determineCategory` no es implementable con números reales; el contrato sí es implementable en forma.
 >
-> **Catálogo de opciones de respuesta.** `selected_option` identifica una opción y `option_value` es el valor Decimal que el backend resuelve para el motor. `REQ-01` no define el catálogo ni su representación física. Antes de implementar, debe acordarse cómo validar que una opción pertenece a una pregunta y cómo se obtiene su valor; no basta con aceptar cualquier entero positivo.
+> **Catálogo de opciones de respuesta (Resuelto en Fase 0 — 2026-11-12).** Se formalizó mediante la tabla `question_option (id, question_id, option_number, text, value)` en §2.2 con clave única `(question_id, option_number)`. `CT-01` expone `{ id, optionNumber, text }` al cliente web (ocultando `value`), y `CT-06` valida `selectedOption` contra `question_option.option_number` para resolver `answer.option_value` desde `question_option.value`.
 >
 > **Fallo doble de persistencia provisional.** Si falla la evaluación y también falla `saveCategory(..., UNDER_EVALUATION, ERROR)`, no existe garantía de que el perfil quede disponible. No se debe afirmar que el cliente puede entrar al panel ni que `BR-04` o `BR-06` quedan satisfechas en ese caso. La respuesta de API/UI y la recuperación requieren una decisión del stakeholder. No se introduce una cola (`ADR-0001`).
 >

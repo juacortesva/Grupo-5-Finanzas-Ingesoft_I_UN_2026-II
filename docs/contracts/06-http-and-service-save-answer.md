@@ -2,8 +2,8 @@
 
 | | |
 |---|---|
-| **Versión** | 1.1 (2026-11-12) — incorpora hallazgos F-01…F-21 de la auditoría de contratos |
-| **Estado** | Propuesto |
+| **Versión** | 1.2 (2026-11-12) — cierra bloqueante `question_option` y formato de errores HTTP |
+| **Estado** | Aprobado |
 | **Trazabilidad** | `REQ-01` · US-01 · AC-01.1, AC-01.2 · `BR-01`, `BR-02`, `BR-03` · `02` §1.1 (loop `saveAnswer`), §1.3, §2.4, §3.2 (fila `saveAnswer`) · `01` §3.2 (`SurveyManager.saveAnswer`) |
 | **Contratos relacionados** | Usa CT-02, CT-07 (`findById`) y CT-08 (`SurveyRepository.saveAnswer`) |
 
@@ -23,8 +23,8 @@ Este archivo documenta **dos interfaces separadas**: la HTTP (§1.A), que consum
   1. `SurveyRepository.findById(surveyId, userId)` (CT-07) devuelve una encuesta; si devuelve `null` → `NotFoundError`.
   2. `survey.status = DRAFT`; si no → `InvalidStateError`.
   3. `questionId` corresponde a una pregunta activa del catálogo de la encuesta; si no → `ValidationError`.
-  4. `selectedOption` pertenece a las `options` de esa pregunta; si no → `ValidationError`.
-* **Postcondiciones (garantiza el proveedor):** Resuelve `optionValue: Decimal` **desde el catálogo del servidor** (nunca desde el cliente) y delega en `SurveyRepository.saveAnswer` (CT-08). Al terminar con éxito, la respuesta de (`surveyId`, `questionId`) queda insertada o actualizada y `survey.updated_at` refleja la escritura. Si CT-08 indica que la escritura no se aplicó (la encuesta dejó de estar en `DRAFT` por un cierre concurrente) → `InvalidStateError`.
+  4. `selectedOption` existe en `question_option.option_number` para `question_option.question_id = questionId`; si no → `ValidationError`.
+* **Postcondiciones (garantiza el proveedor):** Resuelve `optionValue: Decimal` **desde `question_option.value` en el servidor** (nunca desde el cliente) y delega en `SurveyRepository.saveAnswer` (CT-08). Al terminar con éxito, la respuesta de (`surveyId`, `questionId`) queda insertada o actualizada y `survey.updated_at` refleja la escritura. Si CT-08 indica que la escritura no se aplicó (la encuesta dejó de estar en `DRAFT` por un cierre concurrente) → `InvalidStateError`.
 * **Invariantes:**
   * Una encuesta `COMPLETED` nunca acepta respuestas (`BR-03`). La comprobación definitiva ocurre bajo bloqueo en CT-08, no solo en la lectura de CT-07.
   * Ante cualquier fallo no se alteran datos existentes.
@@ -53,7 +53,14 @@ Este archivo documenta **dos interfaces separadas**: la HTTP (§1.A), que consum
       "questionId": "int >= 1 (requerido)",
       "selectedOption": "int >= 1 (requerido)"
     },
-    "output": "vacío (204 No Content)"
+    "output": "vacío (204 No Content)",
+    "errors": {
+      "401": { "detail": "No autenticado" },
+      "404": { "detail": "Encuesta no encontrada" },
+      "409": { "detail": "La encuesta ya fue completada y no admite modificaciones" },
+      "422_domain": { "detail": "Pregunta u opción inválida" },
+      "422_pydantic": { "detail": [{ "type": "string", "loc": ["body", "campo"], "msg": "string" }] }
+    }
   },
   "service": {
     "input": {
@@ -93,12 +100,50 @@ paths:
                 selectedOption: { type: integer, minimum: 1 }
       responses:
         "204": { description: Respuesta registrada o actualizada }
-        "401": { description: No autenticado }
-        "404": { description: Encuesta inexistente o ajena }
-        "409": { description: Encuesta COMPLETED (BR-03) }
-        "422": { description: Pregunta u opción inválida, o cuerpo mal formado }
+        "401":
+          description: No autenticado
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+        "404":
+          description: Encuesta inexistente o ajena
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+        "409":
+          description: Encuesta COMPLETED (BR-03)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+        "422":
+          description: Pregunta u opción inválida, o cuerpo mal formado
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ValidationErrorResponse" }
+components:
+  schemas:
+    ErrorResponse:
+      type: object
+      required: [detail]
+      properties:
+        detail: { type: string }
+    ValidationErrorResponse:
+      type: object
+      required: [detail]
+      properties:
+        detail:
+          oneOf:
+            - { type: string }
+            - type: array
+              items:
+                type: object
+                required: [loc, msg, type]
+                properties:
+                  loc: { type: array, items: { oneOf: [{ type: string }, { type: integer }] } }
+                  msg: { type: string }
+                  type: { type: string }
 ```
 
 ## 5. Notas de alineación
 
-* **Dependencia abierta (`02` §5):** la validación de `selectedOption` y la resolución de `optionValue` dependen del catálogo de opciones por pregunta, que aún no tiene representación física. Es bloqueante para implementar.
+* **Resuelto (Fase 0 — 2026-11-12):** `selectedOption` se valida contra `question_option (question_id, option_number)` y `optionValue` se resuelve desde `question_option.value` (`02` §2.2).

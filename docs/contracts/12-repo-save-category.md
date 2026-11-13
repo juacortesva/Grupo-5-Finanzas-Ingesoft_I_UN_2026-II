@@ -2,8 +2,8 @@
 
 | | |
 |---|---|
-| **Versión** | 1.1 (2026-11-12) — incorpora hallazgos F-01…F-21 de la auditoría de contratos |
-| **Estado** | Propuesto |
+| **Versión** | 1.2 (2026-11-12) — aprobado |
+| **Estado** | Aprobado |
 | **Trazabilidad** | `REQ-01` · AC-01.1, AC-01.3 · `BR-04`, `BR-06` · `02` §1.1 (`saveCategory` con `COMPLETED` y con `UNDER_EVALUATION`/`ERROR`), §2.2 (`financial_profile`), §2.5 · `01` §3.2 (`ProfileRepository`) |
 | **Contratos relacionados** | Lo invoca CT-10 (una vez en el caso exitoso; una o dos veces si hay fallo) |
 
@@ -49,6 +49,8 @@
 ```
 
 ## 4. Notas de alineación con `01` / `02`
+
+> **Estado:** resuelto en `01` v1.2 y `02` v1.3 (2026-11-12). Se conserva como registro del cambio.
 
 * `01` §3.2 declara `saveCategory(userId, surveyId, category, status : String) void`. Debería pasar a `saveCategory(userId : UUID, evaluation : ProfileEvaluation) FinancialProfile`, porque la firma anterior no guardaba `total_score`, que sí existe en el modelo ER (`02` §2.2).
 * Los diagramas de secuencia de `02` §1.1 deben actualizar sus mensajes a `saveCategory(userId, ProfileEvaluation(...))`.

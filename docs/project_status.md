@@ -6,8 +6,8 @@
 | **Ubicación** | `docs/project_status.md` |
 | **Asignatura** | Ingeniería de Software I — Universidad Nacional de Colombia (UNAL) 2026-II |
 | **Última Actualización** | 2026-11-12 |
-| **Estado Global** | Diseño y naming alineados con `REQ-01` / Próxima etapa: **Contratos de Interfaz y Fase 0 — Walking Skeleton** (`ADR-0002`) |
-| **Referencias** | `docs/code_style.md`, `docs/estructura_repositorio.md`, `docs/adr/adr-0001.md`, `docs/adr/adr-0002.md`, `docs/req/REQ-01.md`, `docs/design/01_Architectural_and_Detailed_Design.md`, `docs/design/02_Interaction_and_Data_Design.md` |
+| **Estado Global** | Contratos de interfaz `CT-01`..`CT-12` (v1.2) **Aprobados** y alineados con `01` v1.2 y `02` v1.3 / Bloqueantes de Fase 0 resueltos (`question_option`, auth provisional `CT-02`, formato de errores HTTP) / En ejecución: **Fase 0 — Walking Skeleton** (`ADR-0002`) |
+| **Referencias** | `docs/code_style.md`, `docs/estructura_repositorio.md`, `docs/adr/adr-0001.md`, `docs/adr/adr-0002.md`, `docs/req/REQ-01.md`, `docs/design/01_Architectural_and_Detailed_Design.md`, `docs/design/02_Interaction_and_Data_Design.md`, `docs/contracts/` |
 
 ---
 
@@ -60,6 +60,19 @@ Grupo-5-Finanzas-Ingesoft_I_UN_2026-II/
     ├── adr/
     │   ├── adr-0001.md                                  # Selección del Stack (React, FastAPI, PostgreSQL)
     │   └── adr-0002.md                                  # Estrategia Walking Skeleton + Vertical Slices
+    ├── contracts/                                       # Contratos de interfaz CT-01..CT-12 (DbC + OpenAPI), ver §5.3
+    │   ├── 01-http-start-survey.md
+    │   ├── 02-auth-get-current-user.md
+    │   ├── 03-service-start-survey.md
+    │   ├── 04-repo-find-draft-by-user-id.md
+    │   ├── 05-repo-save-survey.md
+    │   ├── 06-http-and-service-save-answer.md
+    │   ├── 07-repo-find-survey-by-id.md
+    │   ├── 08-repo-save-answer.md
+    │   ├── 09-http-and-service-complete-survey.md
+    │   ├── 10-service-evaluate-profile.md
+    │   ├── 11-engine-scoring.md
+    │   └── 12-repo-save-category.md
     ├── design/
     │   ├── 01_Architectural_and_Detailed_Design.md      # Componentes, diagramas de clases y responsabilidades
     │   └── 02_Interaction_and_Data_Design.md            # Diagramas de secuencia, modelo ER y contratos
@@ -75,7 +88,7 @@ Esta es la estructura completa hacia la cual evolucionará el repositorio durant
 ```text
 Grupo-5-Finanzas-Ingesoft_I_UN_2026-II/
 ├── README.md                                            # Descripción general e instrucciones de arranque
-├── docker-compose.yml                                   # Para levantar PostgreSQL local rápido
+├── docker-compose.yml                                   # Para levantar backend y frontend en la VM (BD en servidor del profesor)
 ├── docs/                                                # Documentación de Ingeniería (YA EXISTENTE)
 │   ├── code_style.md                                    # Estándares Ruff, ESLint, Decimal, Logs
 │   ├── estructura_repositorio.md                        # Reglas de monorepo y capas
@@ -83,6 +96,7 @@ Grupo-5-Finanzas-Ingesoft_I_UN_2026-II/
 │   ├── adr/
 │   │   ├── adr-0001.md
 │   │   └── adr-0002.md
+│   ├── contracts/                                       # CT-01..CT-12
 │   ├── design/
 │   │   ├── 01_Architectural_and_Detailed_Design.md
 │   │   └── 02_Interaction_and_Data_Design.md
@@ -101,7 +115,7 @@ Grupo-5-Finanzas-Ingesoft_I_UN_2026-II/
 │   │   │   ├── router.py                                # SurveyRouter (endpoints HTTP)
 │   │   │   ├── service.py                               # SurveyManager (ciclo DRAFT/COMPLETED)
 │   │   │   ├── repository.py                            # SurveyRepository (contrato + implementación SQLAlchemy)
-│   │   │   ├── models.py                                # Tablas survey, question, answer
+│   │   │   ├── models.py                                # Tablas client, survey, question, question_option, answer
 │   │   │   ├── schemas.py                               # DTOs Pydantic de entrada/salida (CamelCaseSchema)
 │   │   │   └── enums.py                                 # SurveyStatus (DRAFT, COMPLETED)
 │   │   └── categorization/                              # Módulo Categorization (REQ-01)
@@ -110,8 +124,8 @@ Grupo-5-Finanzas-Ingesoft_I_UN_2026-II/
 │   │       ├── engine.py                                # ScoringEngine (matriz Decimal y BR-05 aislados)
 │   │       ├── repository.py                            # ProfileRepository (contrato + implementación SQLAlchemy)
 │   │       ├── models.py                                # Tabla financial_profile
-│   │       ├── schemas.py                               # EvaluationResult
-│   │       └── enums.py                                 # FinancialCategory (CONSERVATIVE, MODERATE, AGGRESSIVE, UNDER_EVALUATION)
+│   │       ├── schemas.py                               # EvaluationResult, ScoredAnswerDTO, ProfileEvaluation
+│   │       └── enums.py                                 # FinancialCategory (CONSERVATIVE, MODERATE, AGGRESSIVE, UNDER_EVALUATION), EvaluationStatus (COMPLETED, ERROR)
 │   └── tests/
 │       ├── unit/                                        # Ej: test_scoring_engine.py (probar BR-05 sin BD)
 │       └── integration/                                 # Ej: test_evaluate_profile.py (Escenarios 1, 2 y 3)
@@ -149,10 +163,15 @@ Grupo-5-Finanzas-Ingesoft_I_UN_2026-II/
 - **Frontera JSON (API REST):** Los payloads JSON utilizan `camelCase` (`surveyId`, `totalScore`), convertidos automáticamente en FastAPI heredando de `CamelCaseSchema` (`alias_generator=to_camel`, `populate_by_name=True`, `from_attributes=True`).
 
 ### 4.2 Equivalencia directa entre Diagramas UML y Python
-- UML `evaluateProfile(userId, surveyId, answers)` $\rightarrow$ Python `evaluate_profile(self, user_id: UUID, survey_id: UUID, answers: list[Answer]) -> EvaluationResult`
-- UML `calculateScore(answers)` $\rightarrow$ Python `calculate_score(self, answers: list[Answer]) -> Decimal`
+*Firmas según los contratos `CT-01`..`CT-12` (v1.1), ya reflejadas en los diagramas de clases del `01` v1.2 (§5.4).*
+- UML `evaluateProfile(userId, surveyId, answers)` $\rightarrow$ Python `evaluate_profile(self, user_id: UUID, survey_id: UUID, answers: list[ScoredAnswerDTO]) -> EvaluationResult`
+- UML `calculateScore(answers)` $\rightarrow$ Python `calculate_score(self, answers: list[ScoredAnswerDTO]) -> Decimal`
 - UML `determineCategory(score)` $\rightarrow$ Python `determine_category(self, score: Decimal) -> FinancialCategory`
 - UML `findDraftByUserId(userId)` $\rightarrow$ Python `find_draft_by_user_id(self, user_id: UUID) -> Survey | None`
+- UML `findById(surveyId, userId)` $\rightarrow$ Python `find_by_id(self, survey_id: UUID, user_id: UUID) -> Survey | None`
+- UML `save(survey)` $\rightarrow$ Python `save(self, survey: Survey) -> Survey | None` (`None` si la transición condicional `DRAFT → COMPLETED` afecta 0 filas)
+- UML `saveAnswer(surveyId, userId, answer)` (repositorio) $\rightarrow$ Python `save_answer(self, survey_id: UUID, user_id: UUID, answer: Answer) -> bool`
+- UML `saveCategory(userId, evaluation)` $\rightarrow$ Python `save_category(self, user_id: UUID, evaluation: ProfileEvaluation) -> FinancialProfile`
 
 ### 4.3 Límites Cuantitativos y Calidad
 - **Longitud máxima de línea:** 88 caracteres en Python (`Ruff`) / 100 caracteres en TypeScript (`Prettier`).
@@ -171,7 +190,7 @@ $$\text{router} \longrightarrow \text{service} \longrightarrow \begin{cases} \te
 
 ---
 
-## 5. Diseño de Datos y Contratos (`02_Interaction_and_Data_Design.md`)
+## 5. Diseño de Datos y Contratos (`02_Interaction_and_Data_Design.md` y `docs/contracts/`)
 
 ### 5.1 Esquema Relacional en PostgreSQL
 1. **`client`:**
@@ -182,27 +201,74 @@ $$\text{router} \longrightarrow \text{service} \longrightarrow \begin{cases} \te
 3. **`question`:**
    - `question_id` (INT, PK), `text` (VARCHAR, NOT NULL), `weight` (NUMERIC, NOT NULL, $\ge 0$), `display_order` (INT, UNIQUE en catálogo activo), `is_required` (BOOLEAN), `is_active` (BOOLEAN).
    - *Restricciones:* Máximo 10 preguntas activas (`BR-01`).
-4. **`answer`:**
+4. **`question_option`:**
+   - `id` (INT, PK), `question_id` (INT, FK $\rightarrow$ `question.question_id`, `ON DELETE CASCADE`), `option_number` (INT, $> 0$, NOT NULL), `text` (VARCHAR, NOT NULL), `value` (NUMERIC, NOT NULL).
+   - *Restricciones:* `UNIQUE (question_id, option_number)`. `value` solo lo usa el backend (oculto en `CT-01`).
+5. **`answer`:**
    - `answer_id` (UUID, PK), `survey_id` (UUID, FK $\rightarrow$ `survey`), `question_id` (INT, FK $\rightarrow$ `question`), `selected_option` (INT, $> 0$), `option_value` (NUMERIC, NOT NULL).
-   - *Restricciones:* Restricción `UNIQUE (survey_id, question_id)`.
-5. **`financial_profile`:**
+   - *Restricciones:* Restricción `UNIQUE (survey_id, question_id)`. `selected_option` se valida contra `question_option (question_id, option_number)` y `option_value` se resuelve desde `question_option.value`.
+6. **`financial_profile`:**
    - `profile_id` (UUID, PK), `client_id` (UUID, FK $\rightarrow$ `client`, UNIQUE), `survey_id` (UUID, FK $\rightarrow$ `survey`, NOT NULL), `assigned_category` (VARCHAR: `'CONSERVATIVE'`, `'MODERATE'`, `'AGGRESSIVE'`, `'UNDER_EVALUATION'`), `evaluation_status` (VARCHAR: `'COMPLETED'`, `'ERROR'`), `total_score` (NUMERIC, NULLABLE), `assigned_at` (TIMESTAMP).
-   - *Restricciones:* Relación 0..1 por cliente (se actualiza mediante *upsert* por `client_id`, `BR-04`). Si `evaluation_status = 'ERROR'`, entonces `assigned_category = 'UNDER_EVALUATION'` y `total_score IS NULL` (`BR-06`).
+   - *Restricciones:* Relación 0..1 por cliente (se actualiza mediante *upsert* por `client_id`, `BR-04`). Si `evaluation_status = 'ERROR'`, entonces `assigned_category = 'UNDER_EVALUATION'` y `total_score IS NULL` (`BR-06`). Se recomienda reforzar esta coherencia con una restricción `CHECK` (`CT-12`).
 
-### 5.2 Contrato de Interfaz Clave: `evaluateProfile`
-- **Operación:** `CategorizationService.evaluate_profile(user_id: UUID, survey_id: UUID, answers: list[Answer]) -> EvaluationResult`
-- **Precondiciones:** Invocada desde `SurveyManager.complete_survey` tras haber persistido la encuesta como `COMPLETED` (`BR-03`). `answers` no está vacía y pertenece a `user_id`.
-- **Postcondiciones (Éxito):** Calcula puntaje exacto en `ScoringEngine`, aplica `BR-05`, guarda en `financial_profile` con estado `'COMPLETED'` (`BR-04`) y retorna `EvaluationResult(survey_id, assigned_category, total_score, status="COMPLETED")`.
-- **Manejo de Fallos (Escenario 3):** Si `answers` está vacía, lanza `InvalidInputError` sin tocar el perfil. Si ocurre cualquier excepción en cálculo o persistencia definitiva, registra log técnico seguro (`log_error`, sin PII ni respuestas), persiste perfil provisional con `UNDER_EVALUATION` y estado `'ERROR'` (`BR-06`) y retorna `EvaluationResult(survey_id, UNDER_EVALUATION, None, status="ERROR")`. Si también falla la escritura provisional, propaga `EvaluationPersistenceError`.
+### 5.2 Contrato de Interfaz Clave: `evaluateProfile` (`CT-10`)
+- **Operación:** `CategorizationService.evaluate_profile(user_id: UUID, survey_id: UUID, answers: list[ScoredAnswerDTO]) -> EvaluationResult`. `ScoredAnswerDTO` lleva `question_id`, `option_value` y `weight` (`Decimal`), construido por `SurveyManager` desde las respuestas persistidas.
+- **Precondiciones:** Invocada desde `SurveyManager.complete_survey` tras haber confirmado la encuesta como `COMPLETED` (`BR-03`). `user_id` es dueño de `survey_id`.
+- **Postcondiciones (Éxito):** Calcula puntaje exacto en `ScoringEngine`, aplica `BR-05`, guarda en `financial_profile` mediante `save_category(user_id, ProfileEvaluation(...))` con estado `'COMPLETED'` (`BR-04`) y retorna `EvaluationResult(survey_id, assigned_category, evaluation_status=COMPLETED, total_score)`.
+- **Manejo de Fallos (Escenario 3):** Si `answers` está vacía, lanza `InvalidInputError` sin tocar el perfil. Si ocurre cualquier excepción en cálculo o persistencia definitiva, registra log técnico seguro (`log_error`, sin PII ni respuestas), persiste perfil provisional con `UNDER_EVALUATION` y estado `'ERROR'` (`BR-06`) y retorna `EvaluationResult(survey_id, UNDER_EVALUATION, evaluation_status=ERROR, total_score=None)`. Si también falla la escritura provisional, propaga `EvaluationPersistenceError`.
+- **Invariante de coherencia:** `evaluation_status = ERROR` ⇔ `assigned_category = UNDER_EVALUATION` ⇔ `total_score is None`.
+
+### 5.3 Índice de Contratos de Interfaz (`docs/contracts/`, v1.2 — Aprobados 2026-11-12)
+
+Cada contrato sigue Diseño por Contrato: encabezado de trazabilidad, precondiciones, validaciones del proveedor, postcondiciones, invariantes, efectos secundarios, tabla de resultados de fallo y estructura `.json`. Los contratos HTTP incluyen además un fragmento OpenAPI.
+
+| ID | Operación | Capa | HTTP (propuesta) | Reglas |
+| :--- | :--- | :--- | :--- | :--- |
+| `CT-01` | `startSurvey` | HTTP (`SurveyRouter`) | `POST /api/surveys` → 200 | `BR-01`, `BR-02` |
+| `CT-02` | `getCurrentUser` | Auth Dependency | — (401 uniforme) | Riesgo / NFR seguridad |
+| `CT-03` | `SurveyManager.startSurvey` | Servicio | — | `BR-01`, `BR-02` |
+| `CT-04` | `SurveyRepository.findDraftByUserId` | Repositorio | — | `BR-02` |
+| `CT-05` | `SurveyRepository.save` | Repositorio | — | `BR-02`, `BR-03` |
+| `CT-06` | `saveAnswer` | HTTP + Servicio | `PUT /api/surveys/{surveyId}/answers` → 204 | `BR-01`..`BR-03` |
+| `CT-07` | `SurveyRepository.findById` | Repositorio | — (`null` → 404, nunca 403) | Riesgo / `BR-03` |
+| `CT-08` | `SurveyRepository.saveAnswer` | Repositorio | — | `BR-03` |
+| `CT-09` | `completeSurvey` | HTTP + Servicio | `POST /api/surveys/{surveyId}/complete` → 200 | `BR-03`..`BR-06` |
+| `CT-10` | `CategorizationService.evaluateProfile` | Servicio | — | `BR-04`..`BR-06` |
+| `CT-11` | `ScoringEngine.calculateScore` / `determineCategory` | Motor de dominio | — | `BR-05`, NFR precisión |
+| `CT-12` | `ProfileRepository.saveCategory` | Repositorio | — | `BR-04`, `BR-06` |
+
+**Decisiones clave incorporadas en los contratos:**
+- **Concurrencia (`BR-03`):** el cierre es un `UPDATE … WHERE status = 'DRAFT'` atómico (`CT-05`) y `save_answer` vuelve a comprobar `DRAFT` bajo `SELECT … FOR UPDATE` (`CT-08`); 0 filas → `InvalidStateError` (409).
+- **Errores HTTP y formato estándar del cuerpo:** `401` (`UnauthorizedError`), `404` (`NotFoundError`, nunca `403`), `409` (`InvalidStateError`), `422` (`ValidationError` o validación Pydantic), `503` propuesto para `EvaluationPersistenceError`.
+  - Respuestas `401`, `404`, `409`, `422` de dominio y `503`: `{ "detail": "<mensaje>" }` (estándar FastAPI).
+  - Respuestas `422` de validación estructural Pydantic (`RequestValidationError`): `{ "detail": [{ "type": "string", "loc": ["body", "campo"], "msg": "string" }] }`.
+- **Autenticación provisional en Fase 0 (`CT-02`):** mientras no exista servicio emisor de tokens, `get_current_user` en `ENVIRONMENT=development` valida `Authorization: Bearer <token>` aceptando `dev-user-1` (`00000000-0000-0000-0000-000000000001`), `dev-user-2` (`00000000-0000-0000-0000-000000000002`) o un `<client_uuid>` válido existente en `client` (y `X-User-Id` como respaldo opcional si `ALLOW_DEV_USER_HEADER=true`). Cualquier credencial ausente, inválida o inexistente retorna `401` `{ "detail": "No autenticado" }`.
+- **`BR-06` en la API:** `completeSurvey` responde 200 también con `evaluationStatus = ERROR`; `totalScore` viaja como `string | null`.
+- **Ocultamiento de información:** el DTO de pregunta hacia la `Web App` no expone `weight` ni `question_option.value`; incluye `options` (`id`, `optionNumber`, `text`), `isRequired` y `displayOrder`, y `startSurvey` devuelve las `answers` ya guardadas para reanudar.
+- **Pesos:** se toman de `question.weight` y viajan en `ScoredAnswerDTO`; `ScoringEngine` solo guarda los umbrales.
+
+### 5.4 Alineación entre Contratos y Diseños `01` / `02` (Completada 2026-11-12)
+
+Los cambios introducidos por los contratos v1.1 quedaron reflejados en `01` v1.2 y `02` v1.3 (registrados en `02` §4, cambios 6–10). Las secciones "Notas de alineación" de cada contrato se conservan como registro y están marcadas como resueltas:
+- [x] `01` §3.2: enum `EvaluationStatus { COMPLETED, ERROR }`; `EvaluationResult.evaluationStatus`; `totalScore : Optional~Decimal~`.
+- [x] `01` §3.2: retornos `Optional~Survey~` en `findById`, `findDraftByUserId` y `save`; `SurveyRepository.saveAnswer` → `Boolean`.
+- [x] `01` §3.2: `saveCategory(userId, evaluation : ProfileEvaluation) FinancialProfile` (incluye `totalScore`).
+- [x] `01` §3.2: `evaluateProfile` y `calculateScore` reciben `List~ScoredAnswerDTO~`; `ScoringEngine.weightMatrix` sustituido por `conservativeThreshold` / `moderateThreshold`.
+- [x] `01` §3.2: atributos `Survey.answers`, `startedAt`, `completedAt`; `Question.displayOrder`, `isRequired`, `options`; nueva clase `AnswerOption`.
+- [x] `01` §3.3–3.4 y §6: responsabilidades, pseudocódigo de `evaluateProfile` y trazabilidad actualizados.
+- [x] `02` §1.1, §2.3–2.5, §3.1–3.2 y §4–5: mensajes `saveCategory(userId, ProfileEvaluation(...))`, `evaluationStatus`, `ScoredAnswerDTO`, estrategia de concurrencia con re-verificación de `DRAFT` y referencias a `CT-XX`.
+- [x] **Resuelto (Fase 0 — 2026-11-12):** tabla física del catálogo de opciones `question_option (id, question_id, option_number, text, value)` añadida al modelo ER de `02` §2.2 y alineada en `CT-01` y `CT-06`.
 
 ---
 
 ## 6. Hoja de Ruta y Checklist de Ejecución (`ADR-0002`)
 
-### [x] Etapa Previa: Ingeniería de Requerimientos y Diseño (100% Completada)
+### [x] Etapa Previa: Ingeniería de Requerimientos y Diseño (Completada — contratos y diseños alineados)
 - [x] Especificación de requerimiento Capstone `REQ-01` (User Story, Criterios Gherkin, Caso de Uso y Diagrama de Flujo).
 - [x] **Bitácora `2026-11-12` (Bloque 1 — `REQ-01`):** Alineación integral de `docs/req/REQ-01.md` con `02_Interaction_and_Data_Design.md` y `docs/code_style.md`, y rediseño atómico de las reglas de negocio (`BR-01` a `BR-06`) ordenadas según el ciclo de vida del caso de uso.
 - [x] **Bitácora `2026-11-12` (Bloque 2 — Diseños y Naming):** Sincronización de `01_Architectural_and_Detailed_Design.md` (`v1.1`), `02_Interaction_and_Data_Design.md`, `adr-0002.md` (renombrado desde `adr_0002.md`), `code_style.md`, `estructura_repositorio.md` y `project_status.md` con `BR-01`..`BR-06`, `saveAnswer`/`save_answer`, `SurveyStatus` `{DRAFT, COMPLETED}`, excepciones unificadas y tablas PostgreSQL en `snake_case`. Clarificación de `CategorizationService` con estereotipo `<<external>>` en el Diagrama B y estandarización del encabezado de trazabilidad a `Scenario / Rule / Constraint`.
+- [x] **Bitácora `2026-11-12` (Bloque 3 — Contratos de Interfaz):** Auditoría de los contratos `CT-01`..`CT-12` frente a `REQ-01`, `01`, `02` y `code_style.md` (21 hallazgos: 3 críticos, 6 altos, 8 medios, 4 bajos) y reescritura de los 12 archivos de `docs/contracts/` con encabezado de trazabilidad, resultados de fallo, soporte de `BR-06`, comprobaciones atómicas de estado contra `BR-03` y fragmentos OpenAPI (ver §5.3). 
+- [x] **Bitácora `2026-11-12` (Bloque 4 — Alineación de Diseños):** `01_Architectural_and_Detailed_Design.md` → v1.2 y `02_Interaction_and_Data_Design.md` → v1.3, alineados con los contratos v1.1 (§5.4): `EvaluationStatus`, `ProfileEvaluation`, `ScoredAnswerDTO`, `AnswerOption`, retornos opcionales/booleanos en `SurveyRepository` y estrategia de concurrencia con re-verificación de `DRAFT`.
 - [x] `ADR-0001`: Selección del Stack Tecnológico.
 - [x] `ADR-0002`: Estrategia Híbrida (*Walking Skeleton* + *Vertical Slices*).
 - [x] `01_Architectural_and_Detailed_Design.md`: Diagrama de componentes, diagramas de clases UML (`Survey` y `Categorization`), responsabilidades y análisis de cohesión/acoplamiento.
@@ -211,21 +277,22 @@ $$\text{router} \longrightarrow \text{service} \longrightarrow \begin{cases} \te
 
 ---
 
-### [ ] Fase 0: Walking Skeleton (Pendiente — Prioridad Inmediata)
-*Objetivo: Dejar operativa toda la tubería tecnológica E2E antes de codificar las reglas financieras. Criterio de salida: clonar repo, levantar contenedores/servicios, ver una petición viajando desde React hasta PostgreSQL y pasar `pytest` en verde.*
+### [ ] Fase 0: Walking Skeleton (En curso — Prioridad Inmediata)
+*Objetivo: Dejar operativa toda la tubería tecnológica E2E (Frontend → Backend → PostgreSQL del servidor del profesor) antes de codificar la UI final. Criterio de salida: levantar los contenedores Docker de backend y frontend en la VM, ejecutar migración contra el PostgreSQL del profesor, pasar `pytest` en verde y verificar los contratos `CT-01`, `CT-02`, `CT-06` y `CT-09` desde el arnés HTML plano.*
 
-- [ ] **1. Infraestructura y Base de Datos:**
-  - [ ] Crear `docker-compose.yml` en la raíz con PostgreSQL, volumen persistente y *healthcheck*.
+- [ ] **1. Infraestructura y Base de Datos (PostgreSQL del servidor del profesor + Docker en VM):**
+  - [ ] Configurar conexión `DATABASE_URL` hacia el **PostgreSQL del servidor del profesor** (sin contenedor de PostgreSQL local).
+  - [ ] Crear `docker-compose.yml` en la raíz **únicamente para levantar el backend y el frontend en la VM**.
   - [ ] Crear `.env.example` y `.gitignore` para Python, Node y entornos locales.
 - [ ] **2. Esqueleto de Backend (`backend/`):**
-  - [ ] Configurar `backend/pyproject.toml` (dependencias: `fastapi`, `uvicorn`, `sqlalchemy`, `psycopg`/`asyncpg`, `alembic`, `pydantic`, `pydantic-settings`; dev: `pytest`, `ruff`, `mypy`, `httpx`).
-  - [ ] Implementar `src/core/config.py`, `src/core/database.py`, `src/core/schemas.py` (`CamelCaseSchema`) y `src/core/auth_deps.py` (dependencia de `user_id`).
-  - [ ] Configurar Alembic (`alembic/`) y generar la migración inicial con las 5 tablas del modelo ER (`client`, `survey`, `question`, `answer`, `financial_profile`).
-  - [ ] Crear estructura base de paquetes en `src/survey/` y `src/categorization/` junto con un endpoint de conectividad E2E en `src/main.py`.
-- [ ] **3. Contrato OpenAPI y Esqueleto de Frontend (`frontend/`):**
-  - [ ] Inicializar aplicación React + Vite + TypeScript en `frontend/`.
-  - [ ] Configurar script `openapi-typescript` en `package.json` para exportar esquemas de FastAPI a `frontend/src/api/generated/`.
-  - [ ] Conectar pantalla base en React consumiendo el backend y ejecutando primera prueba en verde con `pytest`.
+  - [ ] Configurar `backend/pyproject.toml` (dependencias: `fastapi`, `uvicorn`, `sqlalchemy`, `psycopg`, `alembic`, `pydantic`, `pydantic-settings`; dev: `pytest`, `ruff`, `mypy`, `httpx`).
+  - [ ] Implementar `src/core/config.py`, `src/core/database.py`, `src/core/schemas.py` (`CamelCaseSchema`), `src/core/exceptions.py` (formato `{ "detail": ... }` para `401`, `404`, `409`, `422`) y `src/core/auth_deps.py` (`get_current_user` con regla provisional de Fase 0).
+  - [ ] Configurar Alembic (`alembic/`) y ejecutar la migración inicial con las **6 tablas** del modelo ER (`client`, `survey`, `question`, `question_option`, `answer`, `financial_profile`) más la semilla inicial de Fase 0.
+  - [ ] Implementar los endpoints mínimos E2E (`POST /api/surveys`, `PUT /api/surveys/{surveyId}/answers`, `POST /api/surveys/{surveyId}/complete`, `GET /api/health`) validando los contratos aprobados.
+- [ ] **3. Arnés HTML Plano de Verificación de Contratos (`frontend/`):**
+  - [ ] Construir una interfaz simple en **HTML puro / texto sin formato** (sin CSS complejo ni diseño visual) que muestre directamente en pantalla los contratos (`CT-01`, `CT-02`, `CT-06`, `CT-09`) en bloques `<pre>`.
+  - [ ] Incluir controles HTML básicos (formularios/botones) para disparar peticiones reales al backend y visualizar código HTTP y JSON crudo devuelto tanto en casos exitosos (`200`, `204`) como en errores (`401`, `404`, `409`, `422`).
+  - [ ] Ejecutar `pytest` en verde verificando la tubería E2E y todos los contratos.
 
 ---
 
@@ -258,6 +325,7 @@ $$\text{router} \longrightarrow \text{service} \longrightarrow \begin{cases} \te
 ## 7. Preguntas Abiertas y Supuestos Registrados en Diseño
 
 1. **Valores numéricos exactos de los umbrales de categoría:** `REQ-01` y `BR-05` especifican el comportamiento de desempate en el umbral, pero los valores exactos de corte entre `CONSERVATIVE`, `MODERATE` y `AGGRESSIVE` dependen de definición de producto/finanzas. En el código se parametrizarán en el constructor/configuración de `ScoringEngine` (ej. `conservative_threshold`, `moderate_threshold`).
-2. **Catálogo de opciones por pregunta (`selected_option`):** Se modela como entero positivo con `option_value` (`Decimal`) resuelto.
-3. **Fallo doble en persistencia provisional:** Si en el Escenario 3 también falla la escritura de `UNDER_EVALUATION` en la BD, no se introduce cola de mensajería (descartada por `ADR-0001`).
-4. **Autenticación y Resumen del Plan:** El módulo de login/registro no hace parte del alcance de diseño detallado de `REQ-01` (se asume `user_id` provisto por dependencia de contexto), y el resumen del plan en el paso 6 es una vista derivada de la categoría asignada, no un módulo de persistencia independiente.
+2. **Catálogo de opciones por pregunta (`selected_option`) — Resuelto (2026-11-12):** Formalizado en `02` §2.2 mediante la tabla `question_option (id, question_id, option_number, text, value)`. `CT-01` expone `{ id, optionNumber, text }` (ocultando `value`) y `CT-06` valida `selectedOption` contra `question_option.option_number` para resolver `answer.option_value`.
+3. **Fallo doble en persistencia provisional:** Si en el Escenario 3 también falla la escritura de `UNDER_EVALUATION` en la BD, no se introduce cola de mensajería (descartada por `ADR-0001`). `CT-09` propone responder `503` con mensaje genérico; el código HTTP y la experiencia de usuario requieren decisión del stakeholder.
+4. **Autenticación y Resumen del Plan:** El módulo de login/registro no hace parte del alcance de diseño detallado de `REQ-01` (se asume `user_id` provisto por dependencia de contexto), y el resumen del plan en el paso 6 es una vista derivada de la categoría asignada, no un módulo de persistencia independiente. `CT-02` fija la interfaz (credencial → `user_id` o 401) y define el mecanismo provisional de Fase 0 (`Bearer dev-user-1`, `dev-user-2`, `<client_uuid>` y `X-User-Id` opcional en desarrollo).
+5. **Operaciones sin contrato propio:** `resumeSurvey` como endpoint independiente (hoy cubierto funcionalmente por `CT-01`, que devuelve las respuestas guardadas) y la consulta del perfil vigente (`CategorizationRouter` / `ProfileRepository.find_by_user_id`). Esta última es necesaria para recuperar el resultado si el cliente pierde la respuesta HTTP de `completeSurvey` (un reintento recibe 409).

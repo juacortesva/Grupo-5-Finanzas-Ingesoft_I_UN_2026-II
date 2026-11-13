@@ -2,8 +2,8 @@
 
 | | |
 |---|---|
-| **Versión** | 1.1 (2026-11-12) — incorpora hallazgos F-01…F-21 de la auditoría de contratos |
-| **Estado** | Propuesto |
+| **Versión** | 1.2 (2026-11-12) — cierra bloqueante `question_option` y formato de errores HTTP |
+| **Estado** | Aprobado |
 | **Trazabilidad** | `REQ-01` · US-01 · AC-01.1, AC-01.2 · `BR-01`, `BR-02` · `02` §1.1 (mensaje `startSurvey() [HTTP]`), §1.2 · `01` §2.2 (`SurveyRouter`) |
 | **Contratos relacionados** | CT-02 (`getCurrentUser`), CT-03 (`SurveyManager.startSurvey`) |
 
@@ -42,7 +42,11 @@
         "displayOrder": "int (requerido; único en el catálogo activo)",
         "isRequired": "boolean (requerido)",
         "options": [
-          { "selectedOption": "int > 0 (requerido)", "label": "string (requerido)" }
+          {
+            "id": "int (requerido; question_option.id)",
+            "optionNumber": "int > 0 (requerido; question_option.option_number)",
+            "text": "string (requerido; question_option.text)"
+          }
         ]
       }
     ],
@@ -70,10 +74,23 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/SurveyDraftResponse" }
-        "401": { description: No autenticado }
-        "500": { description: Error interno genérico (sin detalles) }
+        "401":
+          description: No autenticado
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+        "500":
+          description: Error interno genérico (sin detalles)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
 components:
   schemas:
+    ErrorResponse:
+      type: object
+      required: [detail]
+      properties:
+        detail: { type: string }
     SurveyDraftResponse:
       type: object
       required: [surveyId, status, startedAt, questions, answers]
@@ -105,11 +122,12 @@ components:
           minItems: 1
           items:
             type: object
-            required: [selectedOption, label]
+            required: [id, optionNumber, text]
             additionalProperties: false
             properties:
-              selectedOption: { type: integer, minimum: 1 }
-              label: { type: string, minLength: 1 }
+              id: { type: integer, minimum: 1 }
+              optionNumber: { type: integer, minimum: 1 }
+              text: { type: string, minLength: 1 }
     AnswerDTO:
       type: object
       required: [questionId, selectedOption]
@@ -121,5 +139,5 @@ components:
 
 ## 5. Notas de alineación
 
-* **Dependencia abierta (`02` §5):** `options` depende del catálogo de opciones por pregunta, que aún no tiene representación física en el modelo ER. Es bloqueante para implementar.
-* La ruta `/api/surveys` es una propuesta coherente con el ejemplo de `docs/code_style.md` (`/api/surveys/{id}/complete`).
+* **Resuelto (Fase 0 — 2026-11-12):** `options` se respalda físicamente en la tabla `question_option (id, question_id, option_number, text, value)` definida en `02` §2.2, exponiendo `{ id, optionNumber, text }` y ocultando `value`.
+* La ruta `/api/surveys` es una ruta aprobada, coherente con `docs/code_style.md` (`/api/surveys/{id}/complete`).
