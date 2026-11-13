@@ -35,11 +35,12 @@ Aplicación web interactiva que permite a los usuarios descubrir y registrar su 
 | **`ADR-0001` / `code_style.md`** | **Precisión Numérica Estricta (Cero `float`)** | **Prohibido usar `float`** para puntajes, pesos de preguntas, valores de opción o montos.En Python se usa exclusivamente `decimal.Decimal` inicializado desde `str` o `int` (ej. `Decimal("0.15")`). En PostgreSQL se usa `NUMERIC(precision, scale)` con `asdecimal=True`. En TypeScript viajan como `string`. |
 | **`ADR-0002`** | **Construcción Híbrida Incremental** | **Fase 0:** *Walking Skeleton* (tubería E2E mínima). **Fases 1 a 3:** *Vertical Slices* por escenario de `REQ-01`. Prohibido desarrollar por capas horizontales aisladas. |
 | **`estructura_repositorio.md`** | **Arquitectura Modular y Data Ownership** | División primaria por módulos de dominio (`survey/`, `categorization/`) y secundaria por capas (`router` $\rightarrow$ `service` $\rightarrow$ `engine`/`repository` $\rightarrow$ `models`). Ningún módulo puede importar `models.py` o `repository.py` de otro módulo. |
-| **`BR-01`** | **Categoría Previa al Plan** | Todo cliente registrado debe tener una categoría inicial asignada en `FINANCIAL_PROFILE` antes de visualizar recomendaciones. |
-| **`BR-02`** | **Acotación de la Encuesta** | El cuestionario está limitado a un **máximo de 10 preguntas activas** en la tabla `QUESTION`. |
-| **`BR-03`** | **Desempate Conservador en Umbral** | Si el puntaje calculado se ubica exactamente en el límite (`<=`) entre dos categorías financieras, `ScoringEngine.determine_category` asigna por defecto la categoría de **menor riesgo** (más conservadora). |
-| **`REQ-01` (Escenario 2)** | **Borrador Único e Inmutabilidad** | Un cliente puede tener **a lo sumo un borrador (`DRAFT`) activo** a la vez. Una vez que una encuesta pasa a estado `COMPLETED`, es **inmutable** y rechaza cualquier invocación a `save_draft`. |
-| **`REQ-01` (Escenario 3)** | **Tolerancia a Fallos Síncrona** | Si falla el motor de cálculo o la persistencia al evaluar, **no se lanza HTTP 500** ni se usan colas asíncronas (RabbitMQ/Celery rechazados en `ADR-0001`). Se captura el error, se asigna la categoría provisional `UNDER_EVALUATION` con `evaluation_status = 'ERROR'` y `total_score = null`, permitiendo el paso al panel principal. |
+| **`BR-01`** | **Acotación del Cuestionario** | La encuesta activa consta de un **máximo de 10 preguntas parametrizadas** en la tabla `QUESTION` con peso no negativo. |
+| **`BR-02`** | **Unicidad de Borrador (`DRAFT`)** | Un cliente puede tener **a lo sumo un borrador (`DRAFT`) activo** a la vez; al reingresar retoma ese mismo borrador sin perder respuestas previas. |
+| **`BR-03`** | **Completitud e Inmutabilidad (`COMPLETED`)** | La encuesta solo pasa a `COMPLETED` con todas las preguntas obligatorias respondidas. Una vez `COMPLETED`, es **inmutable** y rechaza modificaciones. |
+| **`BR-04`** | **Categoría Única Vigente** | Todo cliente que completa la encuesta obtiene exactamente una categoría inicial vigente en `FINANCIAL_PROFILE` vinculada a la encuesta origen. |
+| **`BR-05`** | **Desempate Conservador en Umbral** | Si el puntaje calculado se ubica exactamente en el límite (`<=`) entre dos categorías financieras, `ScoringEngine.determine_category` asigna por defecto la categoría de **menor riesgo** (más conservadora). |
+| **`BR-06`** | **Asignación Provisional ante Fallo** | Si falla el cálculo o persistencia al evaluar, **no se lanza HTTP 500** ni se usan colas asíncronas. Se captura el error, se asigna `UNDER_EVALUATION` con `evaluation_status = 'ERROR'` y `total_score = null`, sin reabrir la encuesta `COMPLETED`. |
 | **Seguridad y Privacidad** | **Protección de Datos y Logs (`REQ-01`)** | El `user_id` se extrae siempre de la dependencia de autenticación del backend, nunca del body HTTP. **Prohibido registrar en logs (`logger.error`, `print`) las respuestas (`answers`), puntajes (`total_score`) o datos personales del usuario.** |
 
 ---
@@ -108,13 +109,13 @@ Grupo-5-Finanzas-Ingesoft_I_UN_2026-II/
 │   │   └── categorization/                              # Módulo Categorization (REQ-01)
 │   │       ├── router.py                                # Categorization Router
 │   │       ├── service.py                               # CategorizationService (orquestación y fallback Escenario 3)
-│   │       ├── engine.py                                # ScoringEngine (matriz Decimal y BR-03 aislados)
+│   │       ├── engine.py                                # ScoringEngine (matriz Decimal y BR-05 aislados)
 │   │       ├── repository.py                            # IProfileRepository + implementación SQLAlchemy
 │   │       ├── models.py                                # Tabla FINANCIAL_PROFILE
 │   │       ├── schemas.py                               # EvaluationResult
 │   │       └── enums.py                                 # FinancialCategory (CONSERVATIVE, MODERATE, AGGRESSIVE, UNDER_EVALUATION)
 │   └── tests/
-│       ├── unit/                                        # Ej: test_scoring_engine.py (probar BR-03 sin BD)
+│       ├── unit/                                        # Ej: test_scoring_engine.py (probar BR-05 sin BD)
 │       └── integration/                                 # Ej: test_evaluate_profile.py (Escenarios 1, 2 y 3)
 └── frontend/                                            # Aplicación Web Cliente React + Vite + TS (POR CONSTRUIR)
     ├── package.json                                     # Dependencias y scripts (openapi-typescript, vitest)
@@ -182,7 +183,7 @@ $$\text{router} \longrightarrow \text{service} \longrightarrow \begin{cases} \te
    - *Restricciones:* Índice único parcial sobre `(client_id) WHERE status = 'DRAFT'` (máximo un borrador abierto por cliente).
 3. **`QUESTION`:**
    - `question_id` (INT, PK), `text` (VARCHAR, NOT NULL), `weight` (NUMERIC, NOT NULL, $\ge 0$), `display_order` (INT, UNIQUE), `is_required` (BOOLEAN).
-   - *Restricciones:* Máximo 10 preguntas activas (`BR-02`).
+   - *Restricciones:* Máximo 10 preguntas activas (`BR-01`).
 4. **`ANSWER`:**
    - `answer_id` (UUID, PK), `survey_id` (UUID, FK $\rightarrow$ `SURVEY`), `question_id` (INT, FK $\rightarrow$ `QUESTION`), `selected_option` (INT, $> 0$), `option_value` (NUMERIC, NOT NULL).
    - *Restricciones:* Restricción `UNIQUE (survey_id, question_id)`.
@@ -193,7 +194,7 @@ $$\text{router} \longrightarrow \text{service} \longrightarrow \begin{cases} \te
 ### 5.2 Contrato de Interfaz Clave: `evaluateProfile`
 - **Operación:** `CategorizationService.evaluate_profile(user_id: UUID, survey_id: UUID, answers: list[Answer]) -> EvaluationResult`
 - **Precondiciones:** Invocada desde `SurveyManager.complete_survey` tras haber persistido la encuesta como `COMPLETED`. `answers` no está vacía y pertenece a `user_id`.
-- **Postcondiciones (Éxito):** Calcula puntaje exacto en `ScoringEngine`, aplica `BR-03`, guarda en `FINANCIAL_PROFILE` con estado `'COMPLETED'` y retorna `EvaluationResult(survey_id, assigned_category, total_score, status="COMPLETED")`.
+- **Postcondiciones (Éxito):** Calcula puntaje exacto en `ScoringEngine`, aplica `BR-05`, guarda en `FINANCIAL_PROFILE` con estado `'COMPLETED'` y retorna `EvaluationResult(survey_id, assigned_category, total_score, status="COMPLETED")`.
 - **Manejo de Fallos (Escenario 3):** Si `answers` está vacía, lanza `InvalidInputError` sin tocar el perfil. Si ocurre cualquier excepción en cálculo o persistencia, registra log técnico seguro (sin PII ni respuestas), persiste perfil con `UNDER_EVALUATION` y estado `'ERROR'`, y retorna `EvaluationResult(survey_id, UNDER_EVALUATION, None, status="ERROR")`.
 
 ---
@@ -202,7 +203,7 @@ $$\text{router} \longrightarrow \text{service} \longrightarrow \begin{cases} \te
 
 ### [x] Etapa Previa: Ingeniería de Requerimientos y Diseño (100% Completada)
 - [x] Especificación de requerimiento Capstone `REQ-01` (User Story, Criterios Gherkin, Caso de Uso y Diagrama de Flujo).
-- [x] **Bitácora `2026-11-12`:** Alineación de `docs/req/REQ-01.md` con `02_Interaction_and_Data_Design.md` y `docs/code_style.md` (separación funcional/no funcional, secuencia `COMPLETED` $\rightarrow$ evaluación, guardado progresivo `DRAFT` y reanudación en primera obligatoria pendiente, tolerancia a fallos síncrona sin reintento en segundo plano y fallo doble, y privacidad sin PII en logs).
+- [x] **Bitácora `2026-11-12`:** Alineación integral de `docs/req/REQ-01.md` con `02_Interaction_and_Data_Design.md` y `docs/code_style.md`, y rediseño atómico de las reglas de negocio (`BR-01` a `BR-06`) ordenadas según el ciclo de vida del caso de uso (pendiente de sincronizar códigos `BR-01`..`BR-06` en `01_Architectural_and_Detailed_Design.md`, `02_Interaction_and_Data_Design.md`, `code_style.md` y `adr_0002.md` en sus respectivos bloques).
 - [x] `ADR-0001`: Selección del Stack Tecnológico.
 - [x] `ADR-0002`: Estrategia Híbrida (*Walking Skeleton* + *Vertical Slices*).
 - [x] `01_Architectural_and_Detailed_Design.md`: Diagrama de componentes, diagramas de clases UML (`Survey` y `Categorization`), responsabilidades y análisis de cohesión/acoplamiento.
@@ -229,25 +230,25 @@ $$\text{router} \longrightarrow \text{service} \longrightarrow \begin{cases} \te
 
 ---
 
-### [ ] Fase 1: Vertical Slice 1 — Camino Feliz (`REQ-01` Escenario 1 + `BR-01`, `BR-02`, `BR-03`)
-- [ ] Semilla/carga de catálogo de hasta 10 preguntas parametrizadas (`QUESTION`) con pesos `Decimal`.
-- [ ] Implementación de `ScoringEngine.calculate_score` y `ScoringEngine.determine_category` (aplicando `BR-03` en umbrales exactos).
+### [ ] Fase 1: Vertical Slice 1 — Camino Feliz (`REQ-01` Escenario 1 + `BR-01`, `BR-03`, `BR-04`, `BR-05`)
+- [ ] Semilla/carga de catálogo de hasta 10 preguntas parametrizadas (`QUESTION`) con pesos `Decimal` (`BR-01`).
+- [ ] Implementación de `ScoringEngine.calculate_score` y `ScoringEngine.determine_category` (aplicando `BR-05` en umbrales exactos).
 - [ ] Implementación de `SurveyManager.start_survey` y `SurveyManager.complete_survey` transicionando a `COMPLETED` e invocando `CategorizationService.evaluate_profile`.
 - [ ] Implementación de `ProfileRepository.save_category` (upsert sobre `FINANCIAL_PROFILE`).
 - [ ] Construcción de vistas en React para responder cuestionario completo y visualizar pantalla de confirmación con categoría asignada y resumen derivado del plan.
-- [ ] Pruebas unitarias de `ScoringEngine` (casos de borde `BR-03`) y prueba de integración E2E del flujo principal.
+- [ ] Pruebas unitarias de `ScoringEngine` (casos de borde `BR-05`) y prueba de integración E2E del flujo principal.
 
 ---
 
-### [ ] Fase 2: Vertical Slice 2 — Resiliencia y Categoría Provisional (`REQ-01` Escenario 3)
+### [ ] Fase 2: Vertical Slice 2 — Resiliencia y Categoría Provisional (`REQ-01` Escenario 3 + `BR-06`)
 - [ ] Implementación del bloque `try/except` en `CategorizationService.evaluate_profile` con logging seguro (sin PII, respuestas ni puntajes).
-- [ ] Guardado de contingencia en `FINANCIAL_PROFILE` con `assigned_category = 'UNDER_EVALUATION'`, `evaluation_status = 'ERROR'` y `total_score = None`.
+- [ ] Guardado de contingencia en `FINANCIAL_PROFILE` con `assigned_category = 'UNDER_EVALUATION'`, `evaluation_status = 'ERROR'` y `total_score = None` (`BR-06`).
 - [ ] Adaptación de la vista de resultados en React para mostrar aviso de falla temporal con categoría provisional "En Evaluación" y acceso habilitado al panel principal (sin pantalla de error 500).
 - [ ] Pruebas automatizadas inyectando fallos simulados en motor/persistencia para verificar el retorno de `EvaluationResult` en estado `ERROR`.
 
 ---
 
-### [ ] Fase 3: Vertical Slice 3 — Abandono y Reanudación de Borrador (`REQ-01` Escenario 2)
+### [ ] Fase 3: Vertical Slice 3 — Abandono y Reanudación de Borrador (`REQ-01` Escenario 2 + `BR-02`, `BR-03`)
 - [ ] Implementación de `SurveyManager.save_draft` garantizando que una encuesta `COMPLETED` rechace modificaciones (`SurveyAlreadyCompletedError`).
 - [ ] Implementación de `SurveyRepository.find_draft_by_user_id` y `SurveyManager.resume_survey` (calculando la primera pregunta obligatoria sin respuesta en `ANSWER`).
 - [ ] Integración en React para guardado parcial de respuestas y detección automática de borrador al reingresar, ubicando al usuario en la pregunta pendiente.
@@ -257,7 +258,7 @@ $$\text{router} \longrightarrow \text{service} \longrightarrow \begin{cases} \te
 
 ## 7. Preguntas Abiertas y Supuestos Registrados en Diseño
 
-1. **Valores numéricos exactos de los umbrales de categoría:** `REQ-01` y `BR-03` especifican el comportamiento de desempate en el umbral, pero los valores exactos de corte entre `CONSERVATIVE`, `MODERATE` y `AGGRESSIVE` dependen de definición de producto/finanzas. En el código se parametrizarán en el constructor/configuración de `ScoringEngine` (ej. `conservative_threshold`, `moderate_threshold`).
+1. **Valores numéricos exactos de los umbrales de categoría:** `REQ-01` y `BR-05` especifican el comportamiento de desempate en el umbral, pero los valores exactos de corte entre `CONSERVATIVE`, `MODERATE` y `AGGRESSIVE` dependen de definición de producto/finanzas. En el código se parametrizarán en el constructor/configuración de `ScoringEngine` (ej. `conservative_threshold`, `moderate_threshold`).
 2. **Catálogo de opciones por pregunta (`selected_option`):** Se modela como entero positivo con `option_value` (`Decimal`) resuelto.
 3. **Fallo doble en persistencia provisional:** Si en el Escenario 3 también falla la escritura de `UNDER_EVALUATION` en la BD, no se introduce cola de mensajería (descartada por `ADR-0001`).
 4. **Autenticación y Resumen del Plan:** El módulo de login/registro no hace parte del alcance de diseño detallado de `REQ-01` (se asume `user_id` provisto por dependencia de contexto), y el resumen del plan en el paso 6 es una vista derivada de la categoría asignada, no un módulo de persistencia independiente.
