@@ -50,26 +50,27 @@ Aplicación web interactiva que permite a los usuarios descubrir y registrar su 
 ## 3. Estructura de Directorios (Realidad Actual vs. Arquitectura Objetivo)
 
 ### 3.1 Estado Actual en el Repositorio
-El repositorio cuenta con la documentación de ingeniería aprobada, la configuración base de contenedores (`docker-compose.yml`, `backend/Dockerfile`, `frontend/Dockerfile`) y el **Walking Skeleton + base de encuesta en `frontend/`** (sin el código fuente de `backend/src/` aún):
+El repositorio contiene la documentación de ingeniería aprobada, la **infraestructura de despliegue** (PR #22) y el **Walking Skeleton + base de encuesta en `frontend/`**. Aún no existe el código fuente de `backend/src/`:
 
 ```text
 Grupo-5-Finanzas-Ingesoft_I_UN_2026-II/
-├── README.md
-├── .env.example
+├── README.md                                            # Ejecución local y despliegue en la VM
+├── .env.example                                         # Plantilla de DATABASE_URL y FRONTEND_PORT (sin credenciales)
 ├── .gitignore
-├── docker-compose.yml
+├── docker-compose.yml                                   # Proyecto team-5: servicios backend y frontend
 ├── backend/
-│   ├── .dockerignore
-│   ├── Dockerfile
-│   └── entrypoint.sh
+│   ├── Dockerfile                                       # Imagen Python 3.12 del backend
+│   ├── entrypoint.sh                                    # alembic upgrade head (si existe alembic.ini) + uvicorn
+│   └── .dockerignore
 ├── frontend/
+│   ├── Dockerfile                                       # Build con Node + nginx
+│   ├── nginx.conf                                       # Sirve React y reenvía /api/ al backend
 │   ├── .dockerignore
 │   ├── .env.example
 │   ├── .prettierrc
-│   ├── Dockerfile
+│   ├── .prettierignore
 │   ├── eslint.config.js
 │   ├── index.html
-│   ├── nginx.conf
 │   ├── package.json
 │   ├── package-lock.json
 │   ├── tsconfig.json
@@ -85,6 +86,7 @@ Grupo-5-Finanzas-Ingesoft_I_UN_2026-II/
 │       ├── api/
 │       │   ├── generated/.gitkeep
 │       │   ├── healthService.ts
+│       │   ├── healthService.test.ts
 │       │   ├── httpClient.ts
 │       │   └── httpClient.test.ts
 │       ├── features/
@@ -102,7 +104,6 @@ Grupo-5-Finanzas-Ingesoft_I_UN_2026-II/
 │           └── utils/ (formatters.ts, formatters.test.ts)
 └── docs/
     ├── code_style.md                                    # Estándares Ruff, ESLint, Decimal, Logs
-    ├── despliegue.md                                    # Guía de despliegue en VM CentOS Stream 10
     ├── estructura_repositorio.md                        # Reglas de monorepo y capas
     ├── project_status.md                                # Estado actualizado del proyecto (este archivo)
     ├── adr/
@@ -284,10 +285,10 @@ $$\text{router} \longrightarrow \text{service} \longrightarrow \begin{cases} \te
 
 ---
 
-### [ ] Fase 0: Walking Skeleton (En Progreso — Infraestructura y Frontend Base)
+### [ ] Fase 0: Walking Skeleton (En Progreso — Infraestructura y Frontend Base Completados)
 *Objetivo: Dejar operativa toda la tubería tecnológica E2E antes de codificar las reglas financieras. Criterio de salida: clonar repo, limpiar la BD externa `g1-team-5-db`, ejecutar migraciones Alembic desde cero, levantar contenedores backend/frontend (`docker-compose.yml`) conectados a `g1-team-5-db` (incluyendo verificación en la VM `CentOS Stream 10`, directorio `/opt/projects-g1/team-5`), ver una petición viajando desde React hasta PostgreSQL y pasar `pytest` en verde.*
 
-- [x] **Bitácora `2026-11-12` (Bloque 4 — Frontend Walking Skeleton y Base de Encuesta):** Inicialización de `frontend/` (React + Vite + TypeScript `strict`), ESLint (`no-explicit-any`, máx. 100 caracteres), Prettier, cliente HTTP (`src/api/httpClient.ts`), banner de conectividad (`/health` vs `VITE_USE_MOCK_API`), flujo completo de encuesta sobre contratos `CT-01`, `CT-06` y `CT-09` con adaptador mock aislado (`ADR-0007`) y suite Vitest en verde (4 archivos, 10 pruebas).
+- [x] **Bitácora `2026-11-12` (Bloque 4 — Frontend Walking Skeleton y Base de Encuesta):** Inicialización de `frontend/` (React + Vite + TypeScript `strict`), ESLint (`no-explicit-any`, máx. 100 caracteres), Prettier, cliente HTTP (`src/api/httpClient.ts`), banner de conectividad (`/api/health` vs `VITE_USE_MOCK_API`), flujo completo de encuesta sobre contratos `CT-01`, `CT-06` y `CT-09` con adaptador mock aislado (`ADR-0007`) y suite Vitest en verde (5 archivos, 17 pruebas).
 - [x] **1. Saneamiento de BD Externa (`g1-team-5-db`) e Infraestructura Docker:**
   - [x] **Prerrequisito obligatorio antes de Alembic** (realizado el 2026-11-13: `g1-team-5-db` quedó sin tablas): Vaciar/limpiar las tablas residuales y `alembic_version` actualmente alojadas en el servidor PostgreSQL externo del curso (`g1-team-5-db`) provenientes de migraciones revertidas en `main`, para ejecutar Alembic desde cero sin conflictos de esquema.
   - [x] Crear `.env.example` (con `DATABASE_URL` apuntando a `g1-team-5-db`, sin credenciales reales) y `.gitignore` para Python, Node y entornos locales.
@@ -298,7 +299,7 @@ $$\text{router} \longrightarrow \text{service} \longrightarrow \begin{cases} \te
   - [ ] Configurar Alembic (`alembic/`) y generar la migración inicial sobre `g1-team-5-db` limpia con las 5 tablas del modelo ER (`client`, `survey`, `question`, `answer`, `financial_profile`).
   - [ ] Crear estructura base de paquetes en `src/survey/` y `src/categorization/` junto con un endpoint de conectividad E2E en `src/main.py`.
 - [ ] **3. Contrato OpenAPI y Esqueleto de Frontend (`frontend/`):**
-  - [x] Inicializar aplicación React + Vite + TypeScript en `frontend/` con cliente HTTP (`httpClient.ts`), indicador `/health` y base de encuesta (`CT-01`, `CT-06`, `CT-09`) con adaptador mock/HTTP y pruebas Vitest en verde.
+  - [x] Inicializar aplicación React + Vite + TypeScript en `frontend/` con cliente HTTP (`httpClient.ts`), indicador `/api/health` y base de encuesta (`CT-01`, `CT-06`, `CT-09`) con adaptador mock/HTTP y pruebas Vitest en verde.
   - [x] Configurar script `generate:api` (`openapi-typescript`) en `package.json` para exportar esquemas de FastAPI a `frontend/src/api/generated/`.
   - [ ] Conectar pantalla base en React consumiendo el backend real (`VITE_USE_MOCK_API=false`) y ejecutar primera prueba E2E en verde con `pytest`.
 
