@@ -82,7 +82,7 @@ flowchart TD
 | **CategorizationRouter**  | Exponer los endpoints HTTP de consulta del perfil financiero vigente del usuario autenticado (`findByUserId`), validando sesión. En `REQ-01`, la evaluación tras enviar la encuesta se dispara internamente vía `SurveyRouter` -> `SurveyManager` -> `CategorizationService`. | `REQ-01` (`BR-04`, consulta de perfil)           | Endpoints HTTP para consultar la categoría vigente del cliente.     | Consultar perfil vigente vía `CategorizationService`, validar la sesión del cliente. | `CategorizationService`                    |
 | **CategorizationService** | Orquestar la evaluación síncrona de respuestas mediante `ScoringEngine` (`BR-05`), persistir la categoría vigente (`BR-04`) y gestionar el fallback síncrono (`BR-06` y `EvaluationPersistenceError` ante fallo doble). | `REQ-01` (`BR-04`, `BR-05`, `BR-06`, Escenario 3)  | Orquestación de cálculo de perfil, categorización y tolerancia a fallos. | Guardar categoría definitiva o provisional (`UNDER_EVALUATION`).                    | `ScoringEngine`, `ProfileRepository`        |
 | **ProfileRepository**     | Aislar y ejecutar las operaciones de base de datos sobre `financial_profile`, restringiendo consultas y modificaciones al propietario (`client_id = userId`). | `REQ-01` (`BR-04`, `BR-06`)                     | Contrato de acceso a datos (`ProfileRepository`).                | Conexión a la base de datos.                                                       | PostgreSQL                                |
-| **PostgreSQL**             | Almacenar de forma persistente y relacional las tablas `client`, `survey`, `question`, `answer` y `financial_profile` con precisión `NUMERIC`. | `ADR-0001`                           | Persistencia de datos, integridad referencial y restricciones únicas. | N/A                                                                                 | N/A                                       |
+| **PostgreSQL**             | Almacenar de forma persistente y relacional las tablas `client`, `survey`, `question`, `answer` y `financial_profile` en el servidor externo del curso (`g1-team-5-db`) con precisión `NUMERIC`. | `ADR-0001`                           | Persistencia de datos, integridad referencial y restricciones únicas. | N/A                                                                                 | N/A                                       |
 
 **Nota de diseño sobre autenticación:** El `userId` (`user_id` en Python) utilizado en las operaciones anteriores se obtiene del contexto de autenticación validado por el backend (dependencia de FastAPI `Depends(get_current_user)` / `getCurrentUser` en UML), nunca del cuerpo de la petición HTTP, y se mapea a `client_id` en PostgreSQL. Esto garantiza que un cliente no pueda suplantar la identidad de otro usuario manipulando la solicitud.
 
@@ -106,20 +106,33 @@ classDiagram
     class CategorizationService {
         - scoringEngine : ScoringEngine
         - profileRepo : ProfileRepository
-        + evaluateProfile(userId : UUID, surveyId : UUID, answers : List~Answer~) EvaluationResult
+        + evaluateProfile(userId : UUID, surveyId : UUID, answers : List~ScoredAnswerDTO~) EvaluationResult
     }
   
     class ScoringEngine {
-        - weightMatrix : Dict
-        + calculateScore(answers : List~Answer~) Decimal
+        - thresholds : Dict
+        + calculateScore(answers : List~ScoredAnswerDTO~) Decimal
         + determineCategory(score : Decimal) FinancialCategory
+    }
+
+    class ScoredAnswerDTO {
+        + questionId : Integer
+        + optionValue : Decimal
+        + weight : Decimal
+    }
+
+    class ProfileEvaluation {
+        + surveyId : UUID
+        + assignedCategory : FinancialCategory
+        + evaluationStatus : EvaluationStatus
+        + totalScore : Optional~Decimal~
     }
   
     class EvaluationResult {
         + surveyId : UUID
         + assignedCategory : FinancialCategory
-        + totalScore : Decimal
-        + status : String
+        + evaluationStatus : EvaluationStatus
+        + totalScore : Optional~Decimal~
     }
 
     class FinancialProfile {
@@ -127,8 +140,8 @@ classDiagram
         + userId : UUID
         + surveyId : UUID
         + assignedCategory : FinancialCategory
-        + evaluationStatus : String
-        + totalScore : Decimal
+        + evaluationStatus : EvaluationStatus
+        + totalScore : Optional~Decimal~
     }
   
     class FinancialCategory {
@@ -138,19 +151,33 @@ classDiagram
         AGGRESSIVE
         UNDER_EVALUATION
     }
+
+    class EvaluationStatus {
+        <<enumeration>>
+        COMPLETED
+        ERROR
+    }
   
     class ProfileRepository {
         <<interface>>
-        + saveCategory(userId : UUID, surveyId : UUID, category : FinancialCategory, status : String) void
-        + findByUserId(userId : UUID) FinancialProfile
+        + saveCategory(userId : UUID, evaluation : ProfileEvaluation) FinancialProfile
+        + findByUserId(userId : UUID) Optional~FinancialProfile~
     }
 
     CategorizationService --> ScoringEngine : uses
+    CategorizationService ..> ScoredAnswerDTO : receives
+    CategorizationService ..> ProfileEvaluation : creates
     CategorizationService ..> EvaluationResult : creates
     CategorizationService --> ProfileRepository : depends on
+    ScoringEngine ..> ScoredAnswerDTO : consumes
     ScoringEngine ..> FinancialCategory : returns
     EvaluationResult *-- FinancialCategory : contains
+    EvaluationResult *-- EvaluationStatus : contains
+    ProfileEvaluation *-- FinancialCategory : contains
+    ProfileEvaluation *-- EvaluationStatus : contains
     FinancialProfile *-- FinancialCategory : contains
+    FinancialProfile *-- EvaluationStatus : contains
+    ProfileRepository ..> ProfileEvaluation : accepts
     ProfileRepository ..> FinancialProfile : returns
 ```
 
@@ -163,20 +190,23 @@ classDiagram
         - categorizationService : CategorizationService
         + startSurvey(userId : UUID) Survey
         + saveAnswer(surveyId : UUID, userId : UUID, answer : Answer) void
-        + resumeSurvey(userId : UUID) Survey
+        + resumeSurvey(userId : UUID) Optional~Survey~
         + completeSurvey(surveyId : UUID, userId : UUID) EvaluationResult
     }
   
     class CategorizationService {
         <<external>>
-        + evaluateProfile(userId : UUID, surveyId : UUID, answers : List~Answer~) EvaluationResult
+        + evaluateProfile(userId : UUID, surveyId : UUID, answers : List~ScoredAnswerDTO~) EvaluationResult
     }
 
     class Survey {
         - surveyId : UUID
         - userId : UUID
         - status : SurveyStatus
+        - startedAt : DateTime
+        - completedAt : Optional~DateTime~
         - questions : List~Question~
+        - answers : List~Answer~
         + updateStatus(newStatus : SurveyStatus) void
         + isCompleted() Boolean
     }
@@ -185,11 +215,15 @@ classDiagram
         - questionId : Integer
         - text : String
         - weight : Decimal
+        - displayOrder : Integer
+        - isRequired : Boolean
+        - options : List~AnswerOption~
     }
   
     class Answer {
         - questionId : Integer
         - selectedOption : Integer
+        - optionValue : Decimal
         + getValue() Decimal
     }
   
@@ -201,10 +235,10 @@ classDiagram
   
     class SurveyRepository {
         <<interface>>
-        + findById(surveyId : UUID, userId : UUID) Survey
-        + findDraftByUserId(userId : UUID) Survey
-        + saveAnswer(surveyId : UUID, userId : UUID, answer : Answer) void
-        + save(survey : Survey) void
+        + findById(surveyId : UUID, userId : UUID) Optional~Survey~
+        + findDraftByUserId(userId : UUID) Optional~Survey~
+        + saveAnswer(surveyId : UUID, userId : UUID, answer : Answer) Boolean
+        + save(survey : Survey) Optional~Survey~
     }
 
     SurveyManager --> SurveyRepository : depends on
@@ -215,27 +249,30 @@ classDiagram
     Survey --> SurveyStatus : has
 ```
 
-**Nota de diseño:** El parámetro `userId` en `saveAnswer`, `completeSurvey` y `findById` proviene del contexto de autenticación validado por el backend (dependencia de FastAPI `getCurrentUser`) y corresponde a `client_id` en PostgreSQL. `findById` solo devuelve la encuesta si pertenece al `userId` indicado; en caso contrario devuelve `null` (traducido a HTTP 404 para no revelar su existencia). Adicionalmente, por `BR-03`, una encuesta en estado `COMPLETED` no puede volver a `DRAFT` ni aceptar modificaciones de sus respuestas.
+**Nota de diseño:** El parámetro `userId` en `saveAnswer`, `completeSurvey` y `findById` proviene del contexto de autenticación validado por el backend (dependencia de FastAPI `getCurrentUser`) y corresponde a `client_id` en PostgreSQL. `findById` solo devuelve la encuesta si pertenece al `userId` indicado; en caso contrario devuelve `null` (`Optional~Survey~`, traducido a HTTP 404 para no revelar su existencia). Adicionalmente, por `BR-03`, una encuesta en estado `COMPLETED` no puede volver a `DRAFT` ni aceptar modificaciones de sus respuestas.
 
 ### 3.3 Class Responsibilities
 
 | Class                           | Component it belongs to | Responsibility                                                                                                                                                                                      | Key collaborators                |
 | ------------------------------- | ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------- |
-| **CategorizationService** | Categorization Module   | Orquestar el proceso síncrono de evaluación (`BR-04`). Recibe las respuestas de la encuesta cerrada en `COMPLETED`, solicita el cálculo matemático y maneja el fallo asignando `UNDER_EVALUATION` con estado `ERROR` (`BR-06`) o propagando `EvaluationPersistenceError` ante fallo doble. | `ScoringEngine`, `ProfileRepository` |
-| **ScoringEngine**         | Categorization Module   | Aplicar la matriz de ponderación y calcular el puntaje exacto usando `Decimal`. Implementa la regla **BR-05** (si el puntaje está en el límite `<=`, asigna la categoría más conservadora). | `FinancialCategory`                |
-| **EvaluationResult**      | Categorization Module   | Transportar el resultado final de la evaluación (puntaje obtenido, categoría asignada y estado `COMPLETED` o `ERROR`).                                                                             | `FinancialCategory`                |
-| **FinancialProfile**      | Categorization Module   | Representar la categoría inicial vigente del cliente (`BR-04`), incluyendo la encuesta origen (`surveyId`) y el estado `COMPLETED` o `ERROR` (`BR-06`). Su atributo `userId` persiste en `financial_profile.client_id`. | `FinancialCategory`                |
+| **CategorizationService** | Categorization Module   | Orquestar el proceso síncrono de evaluación (`BR-04`). Recibe `List~ScoredAnswerDTO~` de la encuesta cerrada en `COMPLETED`, solicita el cálculo matemático y maneja el fallo asignando `UNDER_EVALUATION` con `EvaluationStatus.ERROR` (`BR-06`) o propagando `EvaluationPersistenceError` ante fallo doble. | `ScoringEngine`, `ProfileRepository`, `ScoredAnswerDTO`, `ProfileEvaluation` |
+| **ScoringEngine**         | Categorization Module   | Aplicar la ponderación sobre `ScoredAnswerDTO` con `Decimal` y evaluar los umbrales internos (`thresholds`) implementando la regla **BR-05** (si el puntaje está en el límite `<=`, asigna la categoría más conservadora). | `ScoredAnswerDTO`, `FinancialCategory` |
+| **ScoredAnswerDTO**       | Categorization Module   | DTO de frontera entre módulos (`survey` $\rightarrow$ `categorization`) que transporta `questionId`, `optionValue` (`Decimal`) y `weight` (`Decimal`) sin acoplar el motor a las entidades ORM de `survey`. | `CategorizationService`, `ScoringEngine` |
+| **ProfileEvaluation**     | Categorization Module   | DTO que agrupa el resultado a persistir (`surveyId`, `assignedCategory`, `evaluationStatus`, `totalScore`) para mantener el contrato `ProfileRepository.saveCategory` dentro del límite de parámetros. | `CategorizationService`, `ProfileRepository` |
+| **EvaluationResult**      | Categorization Module   | Transportar el resultado final de la evaluación (`surveyId`, `assignedCategory`, `evaluationStatus` y `totalScore` opcional).                                                                         | `FinancialCategory`, `EvaluationStatus` |
+| **FinancialProfile**      | Categorization Module   | Representar la categoría inicial vigente del cliente (`BR-04`), incluyendo la encuesta origen (`surveyId`), `evaluationStatus` (`COMPLETED` o `ERROR`, `BR-06`) y `totalScore` opcional. Su atributo `userId` persiste en `financial_profile.client_id`. | `FinancialCategory`, `EvaluationStatus` |
 | **FinancialCategory**     | Categorization Module   | Definir el catálogo cerrado de categorías financieras (`CONSERVATIVE`, `MODERATE`, `AGGRESSIVE`, `UNDER_EVALUATION`).                                                                              | N/A (Enumeration)                |
-| **ProfileRepository**     | Categorization Module   | Proveer el contrato (interfaz) para persistir y recuperar la categoría calculada del perfil del cliente (`userId` -> `client_id`) junto con la encuesta origen (`surveyId`), ocultando los detalles de SQLAlchemy. | PostgreSQL (vía ORM)            |
-| **SurveyManager**         | Survey Module           | Coordinar el ciclo de vida de la encuesta (`BR-01`, `BR-02`, `BR-03`). Iniciar o recuperar el único `DRAFT`, validar estado `DRAFT` y reglas antes del guardado progresivo (`saveAnswer`), reanudar borrador (`resumeSurvey`) y cerrar a `COMPLETED` (inmutable) antes de invocar a `CategorizationService`. | `Survey`, `SurveyRepository`, `CategorizationService` |
-| **Survey**                | Survey Module           | Mantener el estado actual de la encuesta (`DRAFT` o `COMPLETED`), agrupar las preguntas (`BR-01`) y las respuestas del cliente. Su atributo `userId` persiste en `survey.client_id`.                 | `Question`, `Answer`, `SurveyStatus` |
-| **Question**              | Survey Module           | Representar una pregunta individual del cuestionario parametrizado, incluyendo su peso (`Decimal`) para la evaluación (`BR-01`).                                                                    | `Survey`                           |
-| **Answer**                | Survey Module           | Almacenar la opción seleccionada por el usuario para una pregunta específica y exponer su valor ponderado/resuelto.                                                                                 | `Question`, `Survey`                 |
+| **EvaluationStatus**      | Categorization Module   | Definir los estados válidos del proceso de evaluación del perfil (`COMPLETED`, `ERROR`).                                                                                                            | N/A (Enumeration)                |
+| **ProfileRepository**     | Categorization Module   | Proveer el contrato (interfaz) para persistir mediante *upsert* la evaluación vigente (`saveCategory(userId, evaluation)`) y recuperar el perfil del cliente (`findByUserId`), ocultando los detalles de SQLAlchemy. | `ProfileEvaluation`, PostgreSQL (vía ORM) |
+| **SurveyManager**         | Survey Module           | Coordinar el ciclo de vida de la encuesta (`BR-01`, `BR-02`, `BR-03`). Iniciar o recuperar el único `DRAFT`, validar estado `DRAFT` y catálogo antes de `saveAnswer`, reanudar borrador (`resumeSurvey`) y cerrar a `COMPLETED` (inmutable) antes de construir `List~ScoredAnswerDTO~` e invocar a `CategorizationService`. | `Survey`, `SurveyRepository`, `CategorizationService` |
+| **Survey**                | Survey Module           | Mantener el estado actual de la encuesta (`DRAFT` o `COMPLETED`), marcas temporales (`startedAt`, `completedAt`), preguntas (`BR-01`) y respuestas del cliente. Su atributo `userId` persiste en `survey.client_id`. | `Question`, `Answer`, `SurveyStatus` |
+| **Question**              | Survey Module           | Representar una pregunta individual del cuestionario parametrizado (`displayOrder`, `isRequired`, `options` y `weight` `Decimal` para `BR-01`).                                                     | `Survey`                           |
+| **Answer**                | Survey Module           | Almacenar la opción seleccionada por el usuario para una pregunta específica y su valor resuelto (`optionValue`).                                                                                    | `Question`, `Survey`                 |
 | **SurveyStatus**          | Survey Module           | Definir los estados válidos del ciclo de la encuesta (`DRAFT`, `COMPLETED`). El estado `ERROR` pertenece al perfil de evaluación, no a la encuesta.                                                 | N/A (Enumeration)                |
-| **SurveyRepository**      | Survey Module           | Proveer el contrato (interfaz) para persistir la encuesta (`save`), guardar respuestas individuales (`saveAnswer`), recuperar por `surveyId` filtrando por `client_id = userId` (`findById`) y localizar el único `DRAFT` del cliente (`findDraftByUserId`). | PostgreSQL (vía ORM)            |
+| **SurveyRepository**      | Survey Module           | Proveer el contrato (interfaz) para crear o cerrar la encuesta (`save`), guardar respuestas bajo bloqueo pesimista (`saveAnswer` retornando `Boolean`), recuperar por `surveyId` filtrando por `client_id = userId` (`findById`) y localizar el único `DRAFT` del cliente (`findDraftByUserId`). | PostgreSQL (vía ORM)            |
 
 **Nota de diseño sobre Colaboradores:**
-Ninguna clase accede directamente a PostgreSQL. Las clases de servicio (`CategorizationService`, `SurveyManager`) solo colaboran con las interfaces de los repositorios (`ProfileRepository`, `SurveyRepository`), garantizando el bajo acoplamiento y el ocultamiento de la información exigidos en `ADR-0001` y `docs/estructura_repositorio.md`.
+Ninguna clase accede directamente a PostgreSQL. Las clases de servicio (`CategorizationService`, `SurveyManager`) solo colaboran con las interfaces de los repositorios (`ProfileRepository`, `SurveyRepository`), garantizando el bajo acoplamiento y el ocultamiento de la información exigidos en `ADR-0001`, `ADR-0003` y `docs/estructura_repositorio.md`.
 
 ### 3.4 Behavior of one key operation
 
@@ -245,15 +282,16 @@ evaluateProfile(userId, surveyId, answers):
         THROW InvalidInputError("La encuesta no tiene respuestas")
 
     TRY:
-        // 1. Cálculo matemático exacto (usando Decimal según ADR-0001)
+        // 1. Cálculo matemático exacto (usando Decimal sobre List<ScoredAnswerDTO> según ADR-0001)
         totalScore = ScoringEngine.calculateScore(answers)
 
         // 2. Determinación de categoría (incluye validación interna de BR-05)
         assignedCategory = ScoringEngine.determineCategory(totalScore)
 
         // 3. Persistencia del resultado exitoso sobre el perfil del cliente (BR-04)
-        ProfileRepository.saveCategory(userId, surveyId, assignedCategory, "COMPLETED")
-        RETURN EvaluationResult(surveyId, assignedCategory, totalScore, "COMPLETED")
+        evaluation = ProfileEvaluation(surveyId, assignedCategory, EvaluationStatus.COMPLETED, totalScore)
+        ProfileRepository.saveCategory(userId, evaluation)
+        RETURN EvaluationResult(surveyId, assignedCategory, EvaluationStatus.COMPLETED, totalScore)
 
     CATCH Exception as error:
         // Escenario 3 del REQ-01 (BR-06): Falla síncrona sin reabrir survey COMPLETED
@@ -263,8 +301,9 @@ evaluateProfile(userId, surveyId, answers):
 
         TRY:
             // Se guarda como provisional para permitir continuar hacia la aplicación
-            ProfileRepository.saveCategory(userId, surveyId, provisionalCategory, "ERROR")
-            RETURN EvaluationResult(surveyId, provisionalCategory, null, "ERROR")
+            provisionalEvaluation = ProfileEvaluation(surveyId, provisionalCategory, EvaluationStatus.ERROR, null)
+            ProfileRepository.saveCategory(userId, provisionalEvaluation)
+            RETURN EvaluationResult(surveyId, provisionalCategory, EvaluationStatus.ERROR, null)
         CATCH Exception:
             // Fallo doble: no se garantiza perfil provisional actualizado
             THROW EvaluationPersistenceError("No fue posible registrar el perfil provisional")
@@ -324,12 +363,12 @@ La decisión arquitectónica (Decision A) se encuentra formalmente documentada e
 
 | Requirement ID                                    | Scenario / Rule / Constraint                                | Component(s)                                                                                     | Class(es)                                                                                                                                                                     |
 | ------------------------------------------------- | ----------------------------------------------------------- | ------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **REQ-01** (Escenario 1; `BR-01`, `BR-03`, `BR-04`) | Categorización exitosa tras completar la encuesta          | `Web App`, `SurveyRouter`, `SurveyManager`, `SurveyRepository`, `CategorizationService`, `ProfileRepository`, `PostgreSQL` | `SurveyManager`, `Survey`, `Question`, `Answer`, `CategorizationService`, `ScoringEngine`, `EvaluationResult`, `FinancialProfile`, `FinancialCategory`, `SurveyRepository`, `ProfileRepository` |
+| **REQ-01** (Escenario 1; `BR-01`, `BR-03`, `BR-04`) | Categorización exitosa tras completar la encuesta          | `Web App`, `SurveyRouter`, `SurveyManager`, `SurveyRepository`, `CategorizationService`, `ProfileRepository`, `PostgreSQL` | `SurveyManager`, `Survey`, `Question`, `Answer`, `ScoredAnswerDTO`, `CategorizationService`, `ScoringEngine`, `EvaluationResult`, `ProfileEvaluation`, `EvaluationStatus`, `FinancialProfile`, `FinancialCategory`, `SurveyRepository`, `ProfileRepository` |
 | **REQ-01** (Escenario 2; `BR-02`, `BR-03`) | Abandono y reanudación de la encuesta (`DRAFT`)          | `Web App`, `SurveyRouter`, `SurveyManager`, `SurveyRepository`, `PostgreSQL`                     | `SurveyManager`, `Survey`, `SurveyStatus`, `SurveyRepository`, `Answer`                                                                                             |
-| **REQ-01** (Escenario 3; `BR-06`)          | Error de cálculo o persistencia (asignación provisional) | `Web App`, `SurveyRouter`, `SurveyManager`, `CategorizationService`, `ProfileRepository`, `PostgreSQL` | `CategorizationService`, `EvaluationResult`, `FinancialProfile`, `FinancialCategory` (`UNDER_EVALUATION`), `ProfileRepository`                                     |
+| **REQ-01** (Escenario 3; `BR-06`)          | Error de cálculo o persistencia (asignación provisional) | `Web App`, `SurveyRouter`, `SurveyManager`, `CategorizationService`, `ProfileRepository`, `PostgreSQL` | `CategorizationService`, `EvaluationResult`, `ProfileEvaluation`, `EvaluationStatus`, `FinancialProfile`, `FinancialCategory` (`UNDER_EVALUATION`), `ProfileRepository` |
 | **REQ-01** (`BR-05`)                       | Desempate conservador por menor riesgo en el límite        | `CategorizationService`                                                                          | `ScoringEngine`, `FinancialCategory`                                                                                                                                      |
 | **REQ-01** (Riesgo de Privacidad / Ownership) | Aislamiento por `userId` (`client_id`) y logs sin PII      | `SurveyRouter`, `CategorizationRouter`, `SurveyManager`, `SurveyRepository`, `CategorizationService`, `ProfileRepository` | `SurveyManager`, `SurveyRepository`, `CategorizationService`, `ProfileRepository`                                                                                    |
-| **ADR-0001** (Restricción Arquitectónica) | Aplicación de arquitectura por capas y persistencia exacta | Todos los módulos (`survey`, `categorization`, `PostgreSQL`)                                     | *(Afecta la estructura modular de capas y el uso estricto de `Decimal` / `NUMERIC`)*                                                                                      |
+| **ADR-0001**..**ADR-0006** (Restricciones Arquitectónicas) | Capas por dominio, precisión decimal, locks, fallback y privacidad | Todos los módulos (`survey`, `categorization`, `PostgreSQL`)                                     | *(Afecta estructura modular, `Decimal`/`NUMERIC`, locks pesimistas y logs sin PII)*                                                                                      |
 
 ---
 
