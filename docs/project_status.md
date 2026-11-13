@@ -5,7 +5,7 @@
 | **Equipo** | Grupo 5 (`@KevinVerjan`, `@Estebandido-exe`, `@josuarezvi`, `@juacortesva`) |
 | **Ubicación** | `docs/project_status.md` |
 | **Asignatura** | Ingeniería de Software I — Universidad Nacional de Colombia (UNAL) 2026-II |
-| **Última Actualización** | 2026-11-11 |
+| **Última Actualización** | 2026-11-12 |
 | **Estado Global** | Diseño completado y validado / Próxima etapa: **Fase 0 — Walking Skeleton** (`ADR-0002`) |
 | **Referencias** | `docs/code_style.md`, `docs/estructura_repositorio.md`, `docs/adr/adr-0001.md`, `docs/adr/adr_0002.md`, `docs/req/REQ-01.md`, `docs/design/01_Architectural_and_Detailed_Design.md`, `docs/design/02_Interaction_and_Data_Design.md` |
 
@@ -202,6 +202,7 @@ $$\text{router} \longrightarrow \text{service} \longrightarrow \begin{cases} \te
 
 ### [x] Etapa Previa: Ingeniería de Requerimientos y Diseño (100% Completada)
 - [x] Especificación de requerimiento Capstone `REQ-01` (User Story, Criterios Gherkin, Caso de Uso y Diagrama de Flujo).
+- [x] **Bitácora `2026-11-12`:** Alineación de `docs/req/REQ-01.md` con `02_Interaction_and_Data_Design.md` y `docs/code_style.md` (separación funcional/no funcional, secuencia `COMPLETED` $\rightarrow$ evaluación, guardado progresivo `DRAFT` y reanudación en primera obligatoria pendiente, tolerancia a fallos síncrona sin reintento en segundo plano y fallo doble, y privacidad sin PII en logs).
 - [x] `ADR-0001`: Selección del Stack Tecnológico.
 - [x] `ADR-0002`: Estrategia Híbrida (*Walking Skeleton* + *Vertical Slices*).
 - [x] `01_Architectural_and_Detailed_Design.md`: Diagrama de componentes, diagramas de clases UML (`Survey` y `Categorization`), responsabilidades y análisis de cohesión/acoplamiento.
