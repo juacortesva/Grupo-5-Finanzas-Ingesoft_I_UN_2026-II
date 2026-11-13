@@ -3,9 +3,9 @@
 | | |
 | :--- | :--- |
 | **Equipo** | Grupo 5 (`@KevinVerjan`, `@Estebandido-exe`, `@josuarezvi`, `@juacortesva`) |
-| **Ubicación** | `docs/PROJECT_STRUCTURE.md` |
+| **Ubicación** | `docs/estructura_repositorio.md` |
 | **Patrón de Organización** | Monorepo Políglota con **Backend y Frontend Modulares por Dominio y Capas Internas** |
-| **Referencias** | `docs/adr/ADR-0001.md`, `docs/adr/ADR-0002.md`, `docs/design/` |
+| **Referencias** | `docs/adr/adr-0001.md`, `docs/adr/adr-0002.md`, `docs/design/` |
 
 ---
 
@@ -13,7 +13,7 @@
 
 El repositorio se organiza como un **Monorepo** que agrupa la documentación de ingeniería (`docs/`), el servidor de aplicación (`backend/`) y la aplicación web cliente (`frontend/`).
 
-Tanto en `backend/` como en `frontend/`, el código **no se agrupa en carpetas técnicas globales** (como un único directorio `models/` o `services/` para todo el sistema), sino que se divide primero por **Módulos de Dominio / Features** (por ejemplo, `survey/`, `categorization/`, `...`) y, dentro de cada módulo, se aplican las **capas arquitectónicas** definidas en `ADR-0001` (`router` $\rightarrow$ `service` $\rightarrow$ `repository` $\rightarrow$ `models`).
+Tanto en `backend/` como en `frontend/`, el código **no se agrupa en carpetas técnicas globales** (como un único directorio `models/` o `services/` para todo el sistema), sino que se divide primero por **Módulos de Dominio / Features** (por ejemplo, `survey/`, `categorization/`, `...`) y, dentro de cada módulo, se aplican las **capas arquitectónicas** definidas en `ADR-0001` (`docs/adr/adr-0001.md`: `router` $\rightarrow$ `service` $\rightarrow$ `repository` $\rightarrow$ `models`).
 
 ### Justificación
 1. **Alineación con el Diseño Arquitectónico:** Refleja exactamente la división modular del sistema planteada en los diagramas de componentes.
@@ -32,10 +32,11 @@ asesor-financiero/
 ├── docker-compose.yml               # Orquestación local de base de datos y servicios
 │
 ├── docs/                            # Documentación de Ingeniería de Software
-│   ├── CODE_STYLE.md                # Estándares de código y convenciones
-│   ├── PROJECT_STRUCTURE.md         # Este documento (arquitectura de carpetas)
-│   ├── adr/                         # Architecture Decision Records (ADR-0001, ...)
-│   ├── req/                         # Especificación de Requerimientos (REQ-01, ...)
+│   ├── code_style.md                # Estándares de código y convenciones
+│   ├── estructura_repositorio.md    # Este documento (arquitectura de carpetas)
+│   ├── project_status.md            # Estado del proyecto y bitácora
+│   ├── adr/                         # Architecture Decision Records (adr-0001.md, adr-0002.md)
+│   ├── req/                         # Especificación de Requerimientos (REQ-01.md)
 │   ├── design/                      # Entregables de Diseño Arquitectónico y de Datos
 │   └── rfc/                         # Requests for Comments (propuestas técnicas)
 │
@@ -106,7 +107,7 @@ Cada rol de archivo dentro de un módulo de dominio tiene responsabilidades estr
 | **`router.py`** | Definición de rutas HTTP, inyección del usuario autenticado (`user_id`) y traducción de excepciones de dominio a respuestas HTTP. | Consultas SQL/ORM, cálculos matemáticos, lógica de transición de estados o reglas de negocio. |
 | **`service.py`** | Coordinación de casos de uso, validación de precondiciones, invocación a repositorios/motores y manejo de tolerancia a fallos. | Objetos HTTP (`Request`, `Response`, `HTTPException`), consultas directas de SQLAlchemy o detalles de infraestructura. |
 | **`engine.py`** | Algoritmos y reglas de negocio o matemáticas puras operando exclusivamente con objetos en memoria y precisión `Decimal`. | Llamadas a repositorios, lecturas de base de datos, variables de entorno o librerías web. |
-| **`repository.py`** | Contratos abstractos de persistencia y su implementación concreta con SQLAlchemy, aplicando siempre el filtro de propiedad por `user_id`. | Cálculos de negocio o decisiones de flujo de aplicación. |
+| **`repository.py`** | Contratos abstractos de persistencia y su implementación concreta con SQLAlchemy, aplicando siempre el filtro de propiedad por `user_id` (`WHERE client_id = :user_id` en BD). | Cálculos de negocio o decisiones de flujo de aplicación. |
 | **`models.py`** | Definición declarativa de las tablas físicas de PostgreSQL de las cuales el módulo es dueño. | Lógica de aplicación o llamadas a servicios externos. |
 | **`schemas.py`** | Contratos de datos (Pydantic DTOs) para validación de peticiones, respuestas y comunicación entre módulos. | Dependencias directas del ORM o sesiones de base de datos. |
 

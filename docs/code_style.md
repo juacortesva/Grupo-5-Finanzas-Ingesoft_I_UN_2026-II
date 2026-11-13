@@ -4,7 +4,7 @@
 | :--- | :--- |
 | **Equipo** | Grupo 5 (`@KevinVerjan`, `@Estebandido-exe`, `@josuarezvi`, `@juacortesva`) |
 | **Stack Cubierto** | Python 3.11+ (FastAPI / SQLAlchemy / Pydantic), TypeScript 5+ (React / Vite), PostgreSQL |
-| **Referencias** | `docs/adr/ADR-0001.md`, `docs/req/REQ-01.md`, `docs/design/01_Architectural_and_Detailed_Design.md`, `docs/design/02_Interaction_and_Data_Design.md` |
+| **Referencias** | `docs/adr/adr-0001.md`, `docs/adr/adr-0002.md`, `docs/req/REQ-01.md`, `docs/design/01_Architectural_and_Detailed_Design.md`, `docs/design/02_Interaction_and_Data_Design.md` |
 
 ---
 
@@ -29,7 +29,7 @@ Adoptamos **estilo idiomático por lenguaje** con conversión automática en la 
 | **Interfaces y Tipos / Schemas** | `PascalCase` (`EvaluationResult`, `ProfileRepository`) | `PascalCase` (`EvaluationResult`, `SurveyDraft`) | N/A | N/A |
 | **Constantes y Enumeraciones** | `UPPER_SNAKE_CASE` (`UNDER_EVALUATION`, `MAX_QUESTIONS`) | `UPPER_SNAKE_CASE` (`UNDER_EVALUATION`, `API_TIMEOUT`) | Valores en `UPPER_SNAKE_CASE` (`'DRAFT'`, `'COMPLETED'`) | `'UNDER_EVALUATION'` |
 | **Tablas y Columnas** | Atributos SQLAlchemy en `snake_case` (`client_id`) | N/A | `snake_case` (`financial_profile`, `total_score`) | N/A |
-| **Archivos y Módulos** | `snake_case.py` (`scoring_engine.py`) | Componentes: `PascalCase.tsx` (`SurveyView.tsx`)<br>Hooks/Utils: `camelCase.ts` (`useSurvey.ts`) | Migraciones en `snake_case.sql` | N/A |
+| **Archivos y Módulos** | `snake_case.py` (`engine.py`) | Componentes: `PascalCase.tsx` (`SurveyView.tsx`)<br>Hooks/Utils: `camelCase.ts` (`useSurvey.ts`) | Migraciones en `snake_case.sql` | N/A |
 
 ### 2.2 Equivalencia entre Diagramas UML y Código Python
 
@@ -72,27 +72,25 @@ def calculate_score(self, answers: list[Answer]) -> Decimal:
 
 ```python
 # ❌ MAL: Anidamiento excesivo (Arrow Anti-pattern)
-def save_draft(self, survey_id: UUID, user_id: UUID, answers: list[Answer]) -> None:
+def save_answer(self, survey_id: UUID, user_id: UUID, answer: Answer) -> None:
     survey = self._survey_repo.find_by_id(survey_id, user_id)
     if survey is not None:
         if survey.status == SurveyStatus.DRAFT:
-            survey.update_answers(answers)
-            self._survey_repo.save(survey)
+            self._survey_repo.save_answer(survey_id, user_id, answer)
         else:
-            raise SurveyAlreadyCompletedError("No se altera una encuesta cerrada.")
+            raise InvalidStateError("No se altera una encuesta cerrada.")
     else:
-        raise SurveyNotFoundError("Encuesta no encontrada.")
+        raise NotFoundError("Encuesta no encontrada.")
 
 # ✅ BIEN: Cláusulas de guarda planas y legibles
-def save_draft(self, survey_id: UUID, user_id: UUID, answers: list[Answer]) -> None:
+def save_answer(self, survey_id: UUID, user_id: UUID, answer: Answer) -> None:
     survey = self._survey_repo.find_by_id(survey_id, user_id)
     if survey is None:
-        raise SurveyNotFoundError("Encuesta no encontrada.")
+        raise NotFoundError("Encuesta no encontrada.")
     if survey.status != SurveyStatus.DRAFT:
-        raise SurveyAlreadyCompletedError("No se altera una encuesta cerrada.")
+        raise InvalidStateError("No se altera una encuesta cerrada.")
 
-    survey.update_answers(answers)
-    self._survey_repo.save(survey)
+    self._survey_repo.save_answer(survey_id, user_id, answer)
 ```
 
 ---
@@ -128,7 +126,7 @@ score: Decimal = option_value * weight
 
 * **Prohibido comentar qué hace el código** si ya es evidente al leer el nombre de la función o variable.
 * **Prohibido dejar código comentado** en la rama principal (para eso existe el historial de Git).
-* **Obligatorio referenciar Reglas de Negocio (`BR-01`, `BR-02`, `BR-03`), Requerimientos (`REQ-01`) o Decisiones (`ADR-0001`)** cuando una línea implemente una restricción específica del dominio.
+* **Obligatorio referenciar Reglas de Negocio (`BR-01` a `BR-06`), Requerimientos (`REQ-01`) o Decisiones (`ADR-0001`)** cuando una línea implemente una restricción específica del dominio.
 
 ### 5.2 Estándar de Docstrings (Formato Google en Python)
 
@@ -160,7 +158,7 @@ class ScoringEngine:
         Returns:
             Categoría financiera asignada al perfil del cliente.
         """
-        # BR-03 (REQ-01): En caso de ubicarse exactamente en el umbral (<=),
+        # BR-05 (REQ-01): En caso de ubicarse exactamente en el umbral (<=),
         # se asigna por defecto la categoría de menor riesgo (más conservadora).
         if score <= self._conservative_threshold:
             return FinancialCategory.CONSERVATIVE
@@ -175,7 +173,7 @@ class ScoringEngine:
 
 Siguiendo la sección 3.4 de `01_Architectural_and_Detailed_Design.md` y la mitigación de riesgos de `REQ-01`:
 
-1. **Excepciones de Dominio Personalizadas:** Los servicios y motores de negocio lanzan excepciones semánticas (`InvalidInputError`, `SurveyNotFoundError`, `SurveyAlreadyCompletedError`), **nunca** `HTTPException` de FastAPI directamente (eso pertenece exclusivamente a la capa `router`).
+1. **Excepciones de Dominio Personalizadas:** Los servicios y motores de negocio lanzan excepciones semánticas (`InvalidInputError`, `NotFoundError`, `InvalidStateError`, `ValidationError`, `UnauthorizedError`, `EvaluationPersistenceError`), **nunca** `HTTPException` de FastAPI directamente (eso pertenece exclusivamente a la capa `router`).
 2. **Privacidad en Logs (Regla de Seguridad `REQ-01`):** Está prohibido registrar en los logs (`logger.error`, `print`) las respuestas del cliente (`answers`), los puntajes obtenidos (`total_score`) o datos personales/financieros. Solo se registra el tipo de error técnico, el nombre de la operación y la marca de tiempo.
 
 ```python
@@ -184,9 +182,9 @@ except Exception as err:
     logger.error(f"Error evaluando usuario {user_id} con respuestas {answers} y score {total_score}: {err}")
     raise HTTPException(status_code=500, detail="Error interno")
 
-# ✅ BIEN: Cumple REQ-01 Escenario 3 y protege la privacidad del cliente en logs
+# ✅ BIEN: Cumple REQ-01 Escenario 3 (BR-06) y protege la privacidad del cliente en logs
 except Exception as err:
-    # REQ-01 Mitigación de Riesgo: No incluir respuestas, puntajes ni PII en logs.
+    # REQ-01 / BR-06: No incluir respuestas, puntajes ni PII en logs.
     logger.error(
         "Evaluation failed during profile categorization",
         extra={
@@ -199,13 +197,13 @@ except Exception as err:
         user_id=user_id,
         survey_id=survey_id,
         category=provisional_category,
-        status=EvaluationStatus.ERROR,
+        status="ERROR",
     )
     return EvaluationResult(
         survey_id=survey_id,
         assigned_category=provisional_category,
         total_score=None,
-        status=EvaluationStatus.ERROR,
+        status="ERROR",
     )
 ```
 
@@ -260,7 +258,7 @@ export function SurveySubmitButton({
 
 ```python
 def test_determine_category_when_score_is_on_exact_threshold_then_assigns_lower_risk() -> None:
-    # Arrange (BR-03: umbral exacto en 50.00 entre CONSERVATIVE y MODERATE)
+    # Arrange (BR-05: umbral exacto en 50.00 entre CONSERVATIVE y MODERATE)
     engine = ScoringEngine(conservative_threshold=Decimal("50.00"), moderate_threshold=Decimal("80.00"))
     boundary_score = Decimal("50.00")
 
