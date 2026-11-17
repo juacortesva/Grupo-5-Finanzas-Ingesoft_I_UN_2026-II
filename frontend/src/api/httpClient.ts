@@ -129,6 +129,9 @@ export async function requestJson<T>(path: string, options: HttpRequestOptions =
   }
 
   if (response.status === 204) {
+    // Se consume el cuerpo vacío: si queda sin leer, el navegador cancela la lectura
+    // pendiente y DevTools muestra la petición como net::ERR_ABORTED aunque fue exitosa.
+    await response.text();
     return undefined as T;
   }
 
