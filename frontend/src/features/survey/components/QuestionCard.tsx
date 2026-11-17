@@ -1,4 +1,5 @@
 import { QuestionDto } from "../types";
+import { AnswerOptionButton } from "./AnswerOptionButton";
 
 interface QuestionCardProps {
   question: QuestionDto;
@@ -24,23 +25,15 @@ export function QuestionCard({
       </h2>
 
       <div className="options-list" role="radiogroup" aria-label={question.text}>
-        {question.options.map((option) => {
-          const isSelected = selectedOption === option.selectedOption;
-          return (
-            <button
-              key={option.selectedOption}
-              type="button"
-              role="radio"
-              aria-checked={isSelected}
-              disabled={isSaving}
-              className={`option-button ${isSelected ? "option-button--selected" : ""}`}
-              onClick={() => onSelectOption(question.questionId, option.selectedOption)}
-            >
-              <span className="option-indicator" aria-hidden="true" />
-              <span>{option.label}</span>
-            </button>
-          );
-        })}
+        {question.options.map((option) => (
+          <AnswerOptionButton
+            key={option.selectedOption}
+            option={option}
+            isSelected={selectedOption === option.selectedOption}
+            isSaving={isSaving}
+            onSelect={(chosen) => onSelectOption(question.questionId, chosen)}
+          />
+        ))}
       </div>
     </section>
   );
