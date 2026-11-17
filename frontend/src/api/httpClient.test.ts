@@ -29,6 +29,20 @@ describe("httpClient", () => {
     expect(headers.Authorization).toBe("Bearer jwt-demo-token");
   });
 
+  it("test_request_json_when_api_returns_204_then_consumes_empty_body", async () => {
+    // Arrange
+    const response = new Response(null, { status: 204 });
+    const readBodySpy = vi.spyOn(response, "text");
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(response);
+
+    // Act
+    const result = await requestJson<void>("/api/surveys/123/answers", { method: "PUT" });
+
+    // Assert
+    expect(result).toBeUndefined();
+    expect(readBodySpy).toHaveBeenCalledTimes(1);
+  });
+
   it("test_request_json_when_api_returns_409_detail_then_throws_api_error", async () => {
     // Arrange
     vi.spyOn(globalThis, "fetch").mockResolvedValue(
