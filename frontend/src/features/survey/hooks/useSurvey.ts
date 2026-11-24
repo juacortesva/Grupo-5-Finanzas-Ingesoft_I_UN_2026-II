@@ -1,8 +1,11 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { ApiError } from "../../../api/httpClient";
-import { findNextPendingQuestionIndex } from "../../../shared/utils/formatters";
+import { useCallback, useMemo } from "react";
 import { SurveyApiPort, surveyApi } from "../api/surveyApi";
 import { EvaluationResultResponse, QuestionDto, SurveyDraftResponse } from "../types";
+import { useAnswerSaver } from "./useAnswerSaver";
+import { useSurveyFeedback } from "./useSurveyFeedback";
+import { useSurveyLoader } from "./useSurveyLoader";
+import { useSurveyNavigation } from "./useSurveyNavigation";
+import { useSurveySubmission } from "./useSurveySubmission";
 
 export interface UseSurveyState {
   draft: SurveyDraftResponse | null;
@@ -24,147 +27,48 @@ export interface UseSurveyState {
   restartSurvey: () => Promise<void>;
 }
 
-function buildAnswerMap(draft: SurveyDraftResponse): Record<number, number> {
-  const map: Record<number, number> = {};
-  for (const answer of draft.answers) {
-    map[answer.questionId] = answer.selectedOption;
+function areAllRequiredAnswered(
+  questions: QuestionDto[],
+  answers: Readonly<Record<number, number>>,
+): boolean {
+  if (questions.length === 0) {
+    return false;
   }
-  return map;
-}
-
-function resolveUserErrorMessage(error: unknown): string {
-  if (error instanceof ApiError) {
-    return error.message;
-  }
-  return "Ocurrió un error inesperado. Por favor, intenta nuevamente.";
+  return questions.every((q) => !q.isRequired || answers[q.questionId] !== undefined);
 }
 
 /** Custom hook que orquesta el ciclo de vida de la encuesta (CT-01, CT-06 y CT-09). */
 export function useSurvey(api: SurveyApiPort = surveyApi): UseSurveyState {
-  const [draft, setDraft] = useState<SurveyDraftResponse | null>(null);
-  const [currentIndex, setCurrentIndex] = useState(0);
-  const [selectedMap, setSelectedMap] = useState<Record<number, number>>({});
-  const [isLoading, setIsLoading] = useState(true);
-  const [isSavingAnswer, setIsSavingAnswer] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [saveFeedback, setSaveFeedback] = useState<string | null>(null);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [result, setResult] = useState<EvaluationResultResponse | null>(null);
+  const feedback = useSurveyFeedback();
+  const loader = useSurveyLoader(api, feedback);
+  const saver = useAnswerSaver(api, loader, feedback);
+  const navigation = useSurveyNavigation(loader, feedback);
+  const submission = useSurveySubmission(api, loader.view.draft, feedback);
+  const { sortedQuestions, currentIndex, selectedOptionByQuestion } = loader.view;
+  const { loadSurvey } = loader;
+  const { resetResult } = submission;
 
-  const loadSurvey = useCallback(async () => {
-    setIsLoading(true);
-    setErrorMessage(null);
-    setResult(null);
-    setSaveFeedback(null);
-    try {
-      const loadedDraft = await api.startSurvey();
-      const ordered = [...loadedDraft.questions].sort((a, b) => a.displayOrder - b.displayOrder);
-      setDraft(loadedDraft);
-      setSelectedMap(buildAnswerMap(loadedDraft));
-      setCurrentIndex(findNextPendingQuestionIndex(ordered, loadedDraft.answers));
-    } catch (error: unknown) {
-      setErrorMessage(resolveUserErrorMessage(error));
-    } finally {
-      setIsLoading(false);
-    }
-  }, [api]);
-
-  useEffect(() => {
-    void loadSurvey();
-  }, [loadSurvey]);
-
-  const sortedQuestions = useMemo(() => {
-    if (!draft) {
-      return [];
-    }
-    return [...draft.questions].sort((a, b) => a.displayOrder - b.displayOrder);
-  }, [draft]);
-
-  const currentQuestion = sortedQuestions[currentIndex] ?? null;
-
-  const allRequiredAnswered = useMemo(() => {
-    if (sortedQuestions.length === 0) {
-      return false;
-    }
-    return sortedQuestions.every((q) => !q.isRequired || selectedMap[q.questionId] !== undefined);
-  }, [sortedQuestions, selectedMap]);
-
-  const selectOption = useCallback(
-    async (questionId: number, selectedOption: number) => {
-      if (!draft) {
-        return;
-      }
-      const previousOption = selectedMap[questionId];
-      setSelectedMap((prev) => ({ ...prev, [questionId]: selectedOption }));
-      setIsSavingAnswer(true);
-      setErrorMessage(null);
-      setSaveFeedback("Guardando respuesta...");
-
-      try {
-        await api.saveAnswer(draft.surveyId, { questionId, selectedOption });
-        setSaveFeedback("Respuesta guardada en tu borrador.");
-      } catch (error: unknown) {
-        setSelectedMap((prev) => {
-          const restored = { ...prev };
-          if (previousOption === undefined) {
-            delete restored[questionId];
-          } else {
-            restored[questionId] = previousOption;
-          }
-          return restored;
-        });
-        setSaveFeedback(null);
-        setErrorMessage(resolveUserErrorMessage(error));
-      } finally {
-        setIsSavingAnswer(false);
-      }
-    },
-    [api, draft, selectedMap],
+  const allRequiredAnswered = useMemo(
+    () => areAllRequiredAnswered(sortedQuestions, selectedOptionByQuestion),
+    [sortedQuestions, selectedOptionByQuestion],
   );
 
-  const goToPreviousQuestion = useCallback(() => {
-    setCurrentIndex((prev) => Math.max(0, prev - 1));
-    setSaveFeedback(null);
-  }, []);
-
-  const goToNextQuestion = useCallback(() => {
-    setCurrentIndex((prev) => Math.min(sortedQuestions.length - 1, prev + 1));
-    setSaveFeedback(null);
-  }, [sortedQuestions.length]);
-
-  const submitSurvey = useCallback(async () => {
-    if (!draft) {
-      return;
-    }
-    setIsSubmitting(true);
-    setErrorMessage(null);
-    try {
-      const evaluation = await api.completeSurvey(draft.surveyId);
-      setResult(evaluation);
-    } catch (error: unknown) {
-      setErrorMessage(resolveUserErrorMessage(error));
-    } finally {
-      setIsSubmitting(false);
-    }
-  }, [api, draft]);
+  const restartSurvey = useCallback(async () => {
+    resetResult();
+    await loadSurvey();
+  }, [loadSurvey, resetResult]);
 
   return {
-    draft,
-    sortedQuestions,
-    currentIndex,
-    currentQuestion,
-    selectedOptionByQuestion: selectedMap,
-    isLoading,
-    isSavingAnswer,
-    isSubmitting,
-    saveFeedback,
-    errorMessage,
-    result,
+    ...loader.view,
+    ...saver,
+    ...navigation,
+    currentQuestion: sortedQuestions[currentIndex] ?? null,
+    errorMessage: feedback.errorMessage,
+    saveFeedback: feedback.saveFeedback,
+    isSubmitting: submission.isSubmitting,
+    result: submission.result,
+    submitSurvey: submission.submitSurvey,
     allRequiredAnswered,
-    selectOption,
-    goToPreviousQuestion,
-    goToNextQuestion,
-    submitSurvey,
-    restartSurvey: loadSurvey,
+    restartSurvey,
   };
 }
