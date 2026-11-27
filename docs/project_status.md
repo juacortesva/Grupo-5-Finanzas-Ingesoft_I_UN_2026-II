@@ -78,8 +78,9 @@ Grupo-5-Finanzas-Ingesoft_I_UN_2026-II/
 │   │   └── categorization/ (service.py [incl. get_categorization_service], engine.py, repository.py, models.py, schemas.py, enums.py)
 │   └── tests/
 │       ├── conftest.py                                  # Soporta PostgreSQL real (TEST_DATABASE_URL) y fallback SQLite
-│       ├── survey/test_survey_contracts.py
-│       └── categorization/ (test_scoring_engine.py, test_categorization_service.py)
+│       ├── doubles/ (survey_doubles.py, categorization_doubles.py)  # Dobles de prueba (docs/contracts/dobles-de-prueba.md)
+│       ├── survey/ (test_survey_contracts.py, test_survey_manager_unit.py, test_survey_router_with_stub.py)
+│       └── categorization/ (test_scoring_engine.py, test_categorization_service.py, test_categorization_service_unit.py)
 ├── frontend/
 │   ├── Dockerfile                                       # Build con Node + nginx
 │   ├── nginx.conf                                       # Sirve React y reenvía /api/ al backend
@@ -135,7 +136,8 @@ Grupo-5-Finanzas-Ingesoft_I_UN_2026-II/
     ├── contracts/
     │   ├── 01-http-start-survey.md                      # CT-01 a CT-12: contratos por operación HTTP/Service/Repo
     │   ├── ...
-    │   └── 12-repo-save-category.md
+    │   ├── 12-repo-save-category.md
+    │   └── dobles-de-prueba.md                          # Catálogo y uso de los dobles de prueba (stubs y fakes)
     ├── design/
     │   ├── 01_Architectural_and_Detailed_Design.md      # Componentes, diagramas de clases y responsabilidades
     │   └── 02_Interaction_and_Data_Design.md            # Diagramas de secuencia, modelo ER y contratos
